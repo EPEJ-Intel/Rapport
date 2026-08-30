@@ -387,7 +387,7 @@ async function saveConfig(){
     balanceInit: num(document.getElementById('cfg-balanceInit').value)
   };
   const ok = await storeSet('config', config);
-  document.getElementById('cfg-status').textContent = ok ? 'Enregistré ✓' : 'Échec de l\\'enregistrement';
+  document.getElementById('cfg-status').textContent = ok ? 'Enregistré ✓' : 'Échec de l\'enregistrement';
   refreshBrand();
   setTimeout(()=>document.getElementById('cfg-status').textContent='', 2500);
 }
@@ -604,8 +604,8 @@ async function renderReports(){
     '<div class="meta-line"><b>Année :</b><span>'+annee+'</span></div>'+
     '<div class="meta-line"><b>Pasteur/Dirigeant :</b><span>'+(config.pasteur||'')+'</span></div>'+
     '<div class="meta-line"><b>Adresse :</b><span>'+(config.adrLocale||'')+'</span></div>'+
-    '<div class="meta-line"><b>Nom de l\\'assemblée :</b><span>'+(config.assemblee||'')+'</span></div>'+
-    '<h3 style="font-family:\\'Fraunces\\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">Rapport des collectes et autres recettes d\\'église</h3>'+
+    '<div class="meta-line"><b>Nom de l\'assemblée :</b><span>'+(config.assemblee||'')+'</span></div>'+
+    '<h3 style="font-family:\'Fraunces\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">Rapport des collectes et autres recettes d\'église</h3>'+
     '<table class="rtable"><thead><tr><th></th><th>Montant des recettes</th><th>Autres recettes</th><th>Dépenses</th><th>Motifs des dépenses</th></tr></thead>'+
     '<tbody>'+weekRowsHtml+'</tbody></table>'+
     '<div class="balance-line"><span>Balance en caisse du mois</span><span class="val'+(r.balanceDuMois<0?' neg':'')+'">'+fmt(r.balanceDuMois)+'</span></div>'+
@@ -619,26 +619,26 @@ async function renderReports(){
     '<div class="meta-line"><b>Année :</b><span>'+annee+'</span></div>'+
     '<div class="meta-line"><b>Pasteur/Dirigeant :</b><span>'+(config.pasteur||'')+'</span></div>'+
     '<div class="meta-line"><b>Adresse :</b><span>'+(config.adrLocale||'')+'</span></div>'+
-    '<div class="meta-line"><b>Nom de l\\'assemblée :</b><span>'+(config.assemblee||'')+'</span></div>'+
-    '<h3 style="font-family:\\'Fraunces\\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">I. Rapport de réveil — Personnes présentes le dimanche</h3>'+
+    '<div class="meta-line"><b>Nom de l\'assemblée :</b><span>'+(config.assemblee||'')+'</span></div>'+
+    '<h3 style="font-family:\'Fraunces\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">I. Rapport de réveil — Personnes présentes le dimanche</h3>'+
     '<table class="rtable"><thead><tr><th></th><th>Enfants</th><th>Adultes</th><th>Total</th></tr></thead>'+
     '<tbody>'+attendanceRowsHtml+'</tbody>'+
     '<tfoot><tr><td>Moyenne des personnes présentes le dimanche matin</td><td colspan="3" class="num">'+fmt(r.moyenne)+'</td></tr></tfoot></table>'+
-    '<h3 style="font-family:\\'Fraunces\\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">II. Rapport financier</h3>'+
+    '<h3 style="font-family:\'Fraunces\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">II. Rapport financier</h3>'+
     '<ul class="fin-list">'+
       '<li><b>1. Dîme du pasteur</b><span>'+fmt(r.dimePasteurTotal)+'</span></li>'+
-      '<li><b>2. Dîme de l\\'église</b><span>'+fmt(r.dimeEgliseTotal)+'</span></li>'+
+      '<li><b>2. Dîme de l\'église</b><span>'+fmt(r.dimeEgliseTotal)+'</span></li>'+
       '<li><b>3. Offrandes</b><span>'+fmt(r.offrandesTotal)+'</span></li>'+
       '<li><b>&nbsp;&nbsp;&nbsp;Dîmes des offrandes</b><span>'+fmt(r.dimeOffrandes)+'</span></li>'+
       '<li><b>4. Actions de grâce</b><span>'+fmt(r.actionsGraceTotal)+'</span></li>'+
       '<li><b>&nbsp;&nbsp;&nbsp;Dîmes des actions de grâce</b><span>'+fmt(r.dimeActionsGrace)+'</span></li>'+
-      '<li class="extra"><b>Fond d\\'évangélisation (info)</b><span>'+fmt(r.fondEvangTotal)+'</span></li>'+
-      '<li><b>5. Cotisation mensuelle de l\\'église</b><span>'+fmt(r.cotisation)+'</span></li>'+
+      '<li class="extra"><b>Fond d\'évangélisation (info)</b><span>'+fmt(r.fondEvangTotal)+'</span></li>'+
+      '<li><b>5. Cotisation mensuelle de l\'église</b><span>'+fmt(r.cotisation)+'</span></li>'+
       '<li class="sum"><b>6. Somme envoyée au bureau national</b><span>'+fmt(r.sommeEnvoyee)+'</span></li>'+
       '<li class="extra"><b>Balance en caisse — mois précédent</b><span>'+fmt(r.balancePrecedente)+'</span></li>'+
       '<li class="extra"><b>Balance en caisse du mois</b><span>'+fmt(r.balanceDuMois)+'</span></li>'+
     '</ul>'+
-    '<div class="balance-line"><span>7. Balance en caisse de l\\'église locale</span><span class="val'+(r.balanceCaisseLocale<0?' neg':'')+'">'+fmt(r.balanceCaisseLocale)+'</span></div>'+
+    '<div class="balance-line"><span>7. Balance en caisse de l\'église locale</span><span class="val'+(r.balanceCaisseLocale<0?' neg':'')+'">'+fmt(r.balanceCaisseLocale)+'</span></div>'+
     '<div class="sig-row"><div><div class="ln">Secrétaire</div></div><div><div class="ln">Pasteur/Dirigeant</div></div></div>'+
   '</div>';
 }
@@ -659,7 +659,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
   if(APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0){
     document.querySelector('.wrap').insertAdjacentHTML('afterbegin',
       '<div style="background:#fdeceb;border:1px solid var(--danger);color:var(--danger);padding:12px 16px;border-radius:8px;margin-bottom:18px;font-size:14px;">'+
-      '⚠ Aucune URL Apps Script configurée. Ouvrez ce fichier index.html, cherchez <code>APPS_SCRIPT_URL</code> en haut du script, et collez-y l\\'URL de votre déploiement Google Apps Script.</div>');
+      '⚠ Aucune URL Apps Script configurée. Ouvrez ce fichier index.html, cherchez <code>APPS_SCRIPT_URL</code> en haut du script, et collez-y l\'URL de votre déploiement Google Apps Script.</div>');
     return;
   }
   await loadConfig();
