@@ -1,0 +1,78 @@
+/**
+ * BACKEND GOOGLE SHEETS — Registre d'église
+ * -------------------------------------------------
+ * Ce script transforme un Google Sheet en petite API web
+ * (clé / valeur) utilisée par le site HTML hébergé sur GitHub Pages.
+ *
+ * INSTALLATION :
+ * 1) Ouvrez (ou créez) un Google Sheet vide.
+ * 2) Menu Extensions > Apps Script.
+ * 3) Supprimez le contenu par défaut, collez tout ce fichier.
+ * 4) Cliquez sur "Déployer" > "Nouveau déploiement".
+ *    - Type : "Application Web"
+ *    - Exécuter en tant que : Moi
+ *    - Qui a accès : Tout le monde
+ * 5) Copiez l'URL fournie (elle ressemble à
+ *    https://script.google.com/macros/s/XXXXXXX/exec)
+ * 6) Collez cette URL dans le fichier index.html, à l'endroit indiqué
+ *    (APPS_SCRIPT_URL).
+ *
+ * Le script crée automatiquement une feuille "KV" au premier appel.
+ */
+
+function getSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('KV');
+  if (!sheet) {
+    sheet = ss.insertSheet('KV');
+    sheet.appendRow(['key', 'value']);
+  }
+  return sheet;
+}
+
+function jsonOut_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// GET  ?key=xxx           -> renvoie {key, value}
+// GET  ?action=list&prefix=mois:  -> renvoie {keys:[...]}
+function doGet(e) {
+  var sheet = getSheet_();
+  var data = sheet.getDataRange().getValues();
+
+  if (e.parameter.action === 'list') {
+    var prefix = e.parameter.prefix || '';
+    var keys = [];
+    for (var i = 1; i < data.length; i++) {
+      var k = data[i][0];
+      if (k && k.toString().indexOf(prefix) === 0) keys.push(k);
+    }
+    return jsonOut_({ keys: keys });
+  }
+
+  var key = e.parameter.key;
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === key) {
+      return jsonOut_({ key: key, value: data[i][1] });
+    }
+  }
+  return jsonOut_(null);
+}
+
+// POST body (text/plain): {"key":"...", "value":"..."} -> crée ou met à jour
+function doPost(e) {
+  var payload = JSON.parse(e.postData.contents);
+  var sheet = getSheet_();
+  var data = sheet.getDataRange().getValues();
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === payload.key) {
+      sheet.getRange(i + 1, 2).setValue(payload.value);
+      return jsonOut_({ ok: true, updated: true });
+    }
+  }
+  sheet.appendRow([payload.key, payload.value]);
+  return jsonOut_({ ok: true, created: true });
+}

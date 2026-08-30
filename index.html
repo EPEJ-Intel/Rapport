@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registre d'église — Rapports mensuels</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1c2b3a;
+    --ink-soft:#4a5b6c;
+    --gold:#a9822f;
+    --gold-deep:#8a691f;
+    --paper:#faf8f3;
+    --paper-line:#e4ddc9;
+    --panel:#ffffff;
+    --line:#d8d2c0;
+    --danger:#a8402f;
+    --good:#2f6a4a;
+    --shadow: 0 1px 2px rgba(28,43,58,.06), 0 6px 20px rgba(28,43,58,.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 27px, var(--paper-line) 27px, var(--paper-line) 28px);
+    color:var(--ink);
+    font-family:'Source Sans 3', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:28px 20px 80px;}
+  header.top{
+    display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+    border-bottom:2px solid var(--ink); padding-bottom:14px; margin-bottom:22px;
+  }
+  header.top .brand{display:flex; flex-direction:column; gap:2px;}
+  header.top .brand .mark{
+    font-family:'Fraunces', serif; font-weight:700; font-size:26px; letter-spacing:.2px;
+  }
+  header.top .brand .sub{font-size:12.5px; color:var(--ink-soft); letter-spacing:.3px;}
+  nav.tabs{display:flex; gap:6px; margin-bottom:22px; flex-wrap:wrap;}
+  nav.tabs button{
+    font-family:'Source Sans 3', sans-serif; font-weight:600; font-size:14px;
+    background:transparent; border:1px solid var(--line); color:var(--ink-soft);
+    padding:9px 16px; border-radius:999px; cursor:pointer; transition:.15s ease;
+  }
+  nav.tabs button:hover{border-color:var(--gold); color:var(--ink);}
+  nav.tabs button.active{background:var(--ink); border-color:var(--ink); color:#fff;}
+
+  section.view{display:none;}
+  section.view.active{display:block;}
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:22px 24px; margin-bottom:18px; box-shadow:var(--shadow);
+  }
+  .card h2{
+    font-family:'Fraunces', serif; font-size:19px; margin:0 0 4px; font-weight:600;
+  }
+  .card .hint{font-size:13px; color:var(--ink-soft); margin:0 0 16px;}
+
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px 18px;}
+  .grid.one{grid-template-columns:1fr;}
+  @media(max-width:640px){.grid{grid-template-columns:1fr;}}
+
+  label{display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:5px; letter-spacing:.2px;}
+  input[type=text], input[type=number], input[type=month], select, textarea{
+    width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:7px;
+    font-family:'Source Sans 3', sans-serif; font-size:14.5px; color:var(--ink); background:#fffefb;
+  }
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--gold); outline-offset:1px; border-color:var(--gold);}
+  .field{margin-bottom:14px;}
+
+  .btn{
+    font-family:'Source Sans 3', sans-serif; font-weight:600; font-size:14px;
+    border:1px solid var(--ink); background:var(--ink); color:#fff;
+    padding:10px 18px; border-radius:7px; cursor:pointer; transition:.15s;
+  }
+  .btn:hover{background:#0f1b27;}
+  .btn.ghost{background:transparent; color:var(--ink); border-color:var(--line);}
+  .btn.ghost:hover{border-color:var(--ink);}
+  .btn.gold{background:var(--gold); border-color:var(--gold-deep); color:#fff;}
+  .btn.gold:hover{background:var(--gold-deep);}
+  .btn.small{padding:6px 12px; font-size:12.5px; border-radius:6px;}
+  .btn.danger{background:transparent; color:var(--danger); border-color:var(--danger);}
+  .btn.danger:hover{background:var(--danger); color:#fff;}
+
+  .row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .row.between{justify-content:space-between;}
+  .month-nav{display:flex; align-items:center; gap:10px;}
+  .month-nav .label{font-family:'Fraunces', serif; font-size:20px; font-weight:600; min-width:190px; text-align:center;}
+  .month-nav button{width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:#fff; cursor:pointer; font-size:16px;}
+  .month-nav button:hover{border-color:var(--gold);}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  table.entry th, table.entry td{border:1px solid var(--line); padding:7px 6px; text-align:center;}
+  table.entry thead th{background:#f4f0e4; font-weight:600; font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.3px;}
+  table.entry td.day-label{text-align:left; font-weight:600; white-space:nowrap;}
+  table.entry td.day-label .dow{display:block; font-size:11px; color:var(--ink-soft); font-weight:500;}
+  table.entry input{padding:6px 4px; text-align:right; font-family:'JetBrains Mono', monospace; font-size:13px;}
+  table.entry tbody tr:nth-child(even){background:#fbfaf5;}
+  table.entry tfoot td{font-weight:700; background:#f4f0e4; font-family:'JetBrains Mono', monospace;}
+  .week-sep td{border-top:2px solid var(--ink); }
+
+  .exp-row{display:grid; grid-template-columns:130px 130px 1fr 90px 34px; gap:8px; margin-bottom:8px; align-items:center;}
+  @media(max-width:640px){.exp-row{grid-template-columns:1fr 1fr; }}
+  .exp-row .rm{background:none; border:none; color:var(--danger); cursor:pointer; font-size:16px;}
+  .exp-head{display:grid; grid-template-columns:130px 130px 1fr 90px 34px; gap:8px; font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; font-weight:600;}
+  @media(max-width:640px){.exp-head{display:none;}}
+
+  .savebar{position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:10px; padding:12px 0 0;}
+  .status{font-size:12.5px; color:var(--good); align-self:center;}
+
+  /* ---- Report styling ---- */
+  .report{
+    background:#fff; border:1px solid var(--line); padding:34px 38px; border-radius:6px;
+    box-shadow:var(--shadow);
+  }
+  .report + .report{margin-top:24px;}
+  .report .rhead{text-align:center; border-bottom:3px double var(--ink); padding-bottom:14px; margin-bottom:18px;}
+  .report .rhead .egl{font-family:'Fraunces', serif; font-weight:700; font-size:21px;}
+  .report .rhead .reg{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
+  .report .rhead .addr{font-size:11.5px; color:var(--ink-soft);}
+  .report .rtitle{font-family:'Fraunces', serif; text-align:center; font-size:16px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; margin:14px 0 18px;}
+  .meta-line{display:flex; gap:6px; font-size:14px; margin-bottom:6px;}
+  .meta-line b{font-weight:600; min-width:150px;}
+  .meta-line span{border-bottom:1px dotted var(--line); flex:1; padding-bottom:1px;}
+  .rtable{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px;}
+  .rtable th, .rtable td{border:1px solid var(--ink-soft); padding:8px; }
+  .rtable th{background:#f4f0e4; font-size:12px; text-transform:uppercase; letter-spacing:.3px;}
+  .rtable td.num{text-align:right; font-family:'JetBrains Mono', monospace;}
+  .rtable td.motif{text-align:left; font-size:12.5px;}
+  .balance-line{display:flex; justify-content:space-between; align-items:baseline; margin-top:16px; padding-top:12px; border-top:2px solid var(--ink); font-family:'Fraunces', serif; font-size:16px; font-weight:600;}
+  .balance-line .val{font-family:'JetBrains Mono', monospace;}
+  .balance-line .val.neg{color:var(--danger);}
+  .fin-list{list-style:none; padding:0; margin:0; font-size:14px;}
+  .fin-list li{display:flex; justify-content:space-between; border-bottom:1px dotted var(--line); padding:7px 0;}
+  .fin-list li b{font-weight:600;}
+  .fin-list li span{font-family:'JetBrains Mono', monospace;}
+  .fin-list li.sum{border-top:2px solid var(--ink); border-bottom:none; margin-top:6px; padding-top:10px; font-weight:700;}
+  .fin-list li.extra{opacity:.75; font-style:italic;}
+  .sig-row{display:flex; justify-content:space-between; margin-top:34px;}
+  .sig-row div{text-align:center; width:45%;}
+  .sig-row .ln{border-top:1px solid var(--ink); margin-top:36px; padding-top:4px; font-size:12px; color:var(--ink-soft);}
+
+  .empty{color:var(--ink-soft); font-size:13.5px; padding:20px; text-align:center; border:1px dashed var(--line); border-radius:8px;}
+
+  @media print{
+    body{background:#fff;}
+    nav.tabs, .savebar, .no-print, header.top{display:none !important;}
+    .wrap{max-width:100%; padding:0;}
+    .card{box-shadow:none;}
+    .report{box-shadow:none; border:none; page-break-after:always;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="mark" id="brandName">Registre d'église</div>
+      <div class="sub" id="brandSub">Collectes, dîmes &amp; rapports mensuels</div>
+    </div>
+    <div class="row no-print">
+      <button class="btn ghost small" onclick="window.print()">🖨 Imprimer</button>
+    </div>
+  </header>
+
+  <nav class="tabs no-print">
+    <button data-tab="config" class="active">⚙ Paramètres</button>
+    <button data-tab="saisie">✎ Saisie mensuelle</button>
+    <button data-tab="rapports">📄 Rapports</button>
+  </nav>
+
+  <!-- ================= CONFIG ================= -->
+  <section class="view active" id="view-config">
+    <div class="card">
+      <h2>Informations de l'église</h2>
+      <p class="hint">À renseigner une seule fois. Ces informations apparaîtront en en-tête des deux rapports.</p>
+      <div class="grid">
+        <div class="field">
+          <label>Nom de l'église (siège national)</label>
+          <input type="text" id="cfg-nomEglise" placeholder="Eglise du Plein Evangile de Jésus-Christ EPEJ">
+        </div>
+        <div class="field">
+          <label>N° d'immatriculation</label>
+          <input type="text" id="cfg-immat" placeholder="2010/009/MISP/DC/SG/DGAI/SCC ASSOC">
+        </div>
+        <div class="field">
+          <label>Adresse du siège</label>
+          <input type="text" id="cfg-adrSiege" placeholder="01 BP 1652 Parakou-Bénin">
+        </div>
+        <div class="field">
+          <label>Nom de l'assemblée locale</label>
+          <input type="text" id="cfg-assemblee" placeholder="EPEJ de Bohicon">
+        </div>
+        <div class="field">
+          <label>Pasteur / Dirigeant</label>
+          <input type="text" id="cfg-pasteur" placeholder="METOLIHO Etienne">
+        </div>
+        <div class="field">
+          <label>Adresse locale</label>
+          <input type="text" id="cfg-adrLocale" placeholder="Bohicon">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Point de départ des enregistrements</h2>
+      <p class="hint">La balance en caisse de l'église locale se calcule de façon cumulative (mois précédent + mois en cours). Indiquez ici la balance existante juste avant votre tout premier mois enregistré dans cette base — elle servira de point de départ.</p>
+      <div class="grid">
+        <div class="field">
+          <label>Balance en caisse avant le début des enregistrements</label>
+          <input type="number" id="cfg-balanceInit" step="1" placeholder="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="savebar">
+      <span class="status" id="cfg-status"></span>
+      <button class="btn gold" onclick="saveConfig()">Enregistrer les paramètres</button>
+    </div>
+  </section>
+
+  <!-- ================= SAISIE ================= -->
+  <section class="view" id="view-saisie">
+    <div class="card">
+      <div class="row between">
+        <div class="month-nav">
+          <button onclick="shiftMonth(-1)">‹</button>
+          <div class="label" id="saisie-monthLabel">—</div>
+          <button onclick="shiftMonth(1)">›</button>
+        </div>
+        <div class="row">
+          <span class="status" id="saisie-status"></span>
+          <button class="btn gold" onclick="saveMonth()">Enregistrer le mois</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Cultes du mois — Mercredi, Vendredi, Dimanche</h2>
+      <p class="hint">Renseignez les montants collectés à chaque culte et l'assistance correspondante. Les groupes de lignes correspondent aux semaines d'église (mercredi + vendredi + dimanche qui se suivent), utilisées pour le rapport des collectes.</p>
+      <div id="entryTableWrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>Dépenses du mois</h2>
+      <p class="hint">Chaque dépense est rattachée à une semaine, pour alimenter le rapport des collectes.</p>
+      <div class="exp-head no-print">
+        <span>Date</span><span>Semaine</span><span>Motif</span><span>Montant</span><span></span>
+      </div>
+      <div id="expenseWrap"></div>
+      <button class="btn ghost small" onclick="addExpenseRow()">+ Ajouter une dépense</button>
+    </div>
+
+    <div class="card">
+      <h2>Autres informations du mois</h2>
+      <div class="grid">
+        <div class="field">
+          <label>Cotisation mensuelle de l'église</label>
+          <input type="number" id="cotisation" step="1" placeholder="0">
+        </div>
+        <div class="field">
+          <label>Balance en caisse — mois précédent <span style="font-weight:400;">(auto, modifiable)</span></label>
+          <input type="number" id="balancePrec" step="1">
+        </div>
+      </div>
+    </div>
+
+    <div class="savebar">
+      <span class="status" id="saisie-status2"></span>
+      <button class="btn gold" onclick="saveMonth()">Enregistrer le mois</button>
+    </div>
+  </section>
+
+  <!-- ================= RAPPORTS ================= -->
+  <section class="view" id="view-rapports">
+    <div class="card no-print">
+      <div class="row between">
+        <div class="month-nav">
+          <button onclick="shiftReportMonth(-1)">‹</button>
+          <div class="label" id="rapport-monthLabel">—</div>
+          <button onclick="shiftReportMonth(1)">›</button>
+        </div>
+        <button class="btn ghost small" onclick="window.print()">🖨 Imprimer les rapports</button>
+      </div>
+    </div>
+    <div id="reportsWrap"></div>
+  </section>
+
+</div>
+
+<script>
+/* ===================== STATE & CONSTANTS ===================== */
+const DOW = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+const CHURCH_DAYS = [0,3,5]; // Sun, Wed, Fri
+const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+let config = { nomEglise:'', immat:'', adrSiege:'', assemblee:'', pasteur:'', adrLocale:'', balanceInit:0 };
+let cursor = new Date(); cursor.setDate(1); // saisie month cursor
+let reportCursor = new Date(); reportCursor.setDate(1);
+let currentMonthData = null; // {jours:{}, depenses:[], cotisation:0, balancePrecManuelle:null, calculatedBalance:null}
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function ymKey(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1); }
+function isoDate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function fmt(n){
+  n = Math.round(n*100)/100;
+  return n.toLocaleString('fr-FR');
+}
+
+/* ===================== STORAGE HELPERS (Google Sheets via Apps Script) ===================== */
+// 👉 Collez ici l'URL de déploiement de votre Apps Script (se termine par /exec)
+const APPS_SCRIPT_URL = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";
+
+async function storeGet(key){
+  try{
+    const res = await fetch(APPS_SCRIPT_URL + '?key=' + encodeURIComponent(key));
+    const json = await res.json();
+    if(!json || json.value === undefined || json.value === null) return null;
+    return JSON.parse(json.value);
+  }catch(e){ console.error('storage get failed', e); return null; }
+}
+async function storeSet(key, obj){
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'}, // évite le préflight CORS
+      body: JSON.stringify({ key: key, value: JSON.stringify(obj) })
+    });
+    const json = await res.json();
+    return !!(json && json.ok);
+  }catch(e){ console.error('storage set failed', e); return false; }
+}
+
+/* ===================== DATE HELPERS ===================== */
+function daysInMonth(year, monthIdx){ return new Date(year, monthIdx+1, 0).getDate(); }
+
+function getChurchDays(year, monthIdx){
+  const total = daysInMonth(year, monthIdx);
+  const out = [];
+  for(let day=1; day<=total; day++){
+    const d = new Date(year, monthIdx, day);
+    if(CHURCH_DAYS.includes(d.getDay())) out.push(d);
+  }
+  return out;
+}
+
+// group chronologically: a week closes when a Sunday is reached
+function groupIntoWeeks(dates){
+  const weeks = [];
+  let current = [];
+  dates.forEach(d=>{
+    current.push(d);
+    if(d.getDay() === 0){ weeks.push(current); current = []; }
+  });
+  if(current.length) weeks.push(current);
+  return weeks;
+}
+
+/* ===================== CONFIG TAB ===================== */
+async function loadConfig(){
+  const c = await storeGet('config');
+  if(c) config = c;
+  document.getElementById('cfg-nomEglise').value = config.nomEglise||'';
+  document.getElementById('cfg-immat').value = config.immat||'';
+  document.getElementById('cfg-adrSiege').value = config.adrSiege||'';
+  document.getElementById('cfg-assemblee').value = config.assemblee||'';
+  document.getElementById('cfg-pasteur').value = config.pasteur||'';
+  document.getElementById('cfg-adrLocale').value = config.adrLocale||'';
+  document.getElementById('cfg-balanceInit').value = config.balanceInit ?? 0;
+  refreshBrand();
+}
+async function saveConfig(){
+  config = {
+    nomEglise: document.getElementById('cfg-nomEglise').value.trim(),
+    immat: document.getElementById('cfg-immat').value.trim(),
+    adrSiege: document.getElementById('cfg-adrSiege').value.trim(),
+    assemblee: document.getElementById('cfg-assemblee').value.trim(),
+    pasteur: document.getElementById('cfg-pasteur').value.trim(),
+    adrLocale: document.getElementById('cfg-adrLocale').value.trim(),
+    balanceInit: num(document.getElementById('cfg-balanceInit').value)
+  };
+  const ok = await storeSet('config', config);
+  document.getElementById('cfg-status').textContent = ok ? 'Enregistré ✓' : 'Échec de l\\'enregistrement';
+  refreshBrand();
+  setTimeout(()=>document.getElementById('cfg-status').textContent='', 2500);
+}
+function refreshBrand(){
+  document.getElementById('brandName').textContent = config.assemblee || config.nomEglise || "Registre d'église";
+  document.getElementById('brandSub').textContent = config.pasteur ? ('Pasteur/Dirigeant : ' + config.pasteur) : "Collectes, dîmes & rapports mensuels";
+}
+
+/* ===================== SAISIE TAB ===================== */
+async function shiftMonth(delta){
+  cursor.setMonth(cursor.getMonth()+delta);
+  await loadSaisieMonth();
+}
+
+async function loadSaisieMonth(){
+  const key = ymKey(cursor);
+  document.getElementById('saisie-monthLabel').textContent = MONTH_NAMES[cursor.getMonth()] + ' ' + cursor.getFullYear();
+  const data = await storeGet('mois:'+key);
+  currentMonthData = data || { jours:{}, depenses:[], cotisation:0, balancePrecManuelle:null, calculatedBalance:null };
+  document.getElementById('cotisation').value = currentMonthData.cotisation ?? 0;
+  await renderEntryTable();
+  renderExpenses();
+  await computeAndFillBalancePrec();
+}
+
+async function computeAndFillBalancePrec(){
+  const el = document.getElementById('balancePrec');
+  if(currentMonthData.balancePrecManuelle !== null && currentMonthData.balancePrecManuelle !== undefined){
+    el.value = currentMonthData.balancePrecManuelle;
+    return;
+  }
+  const prev = new Date(cursor); prev.setMonth(prev.getMonth()-1);
+  const prevData = await storeGet('mois:'+ymKey(prev));
+  if(prevData && typeof prevData.calculatedBalance === 'number'){
+    el.value = prevData.calculatedBalance;
+  } else {
+    el.value = config.balanceInit || 0;
+  }
+}
+
+async function renderEntryTable(){
+  const days = getChurchDays(cursor.getFullYear(), cursor.getMonth());
+  const weeks = groupIntoWeeks(days);
+  let html = '<table class="entry"><thead><tr>'+
+    '<th style="text-align:left;">Jour</th><th>Offrandes</th><th>Dîme<br>Pasteur</th><th>Dîme<br>Église</th>'+
+    '<th>Actions<br>de grâce</th><th>Fond<br>évangélisation</th><th>Enfants</th><th>Adultes</th></tr></thead><tbody>';
+
+  weeks.forEach((week, wi)=>{
+    week.forEach((d, di)=>{
+      const key = isoDate(d);
+      const rec = currentMonthData.jours[key] || {};
+      const firstOfWeek = di===0;
+      html += '<tr'+(firstOfWeek?' class="week-sep"':'')+'>';
+      html += '<td class="day-label">'+d.getDate()+' '+MONTH_NAMES[d.getMonth()].slice(0,3)+'.<span class="dow">'+DOW[d.getDay()]+(firstOfWeek?' · Semaine '+(wi+1):'')+'</span></td>';
+      ['offrandes','dimePasteur','dimeEglise','actionsGrace','fondEvangelisation','enfants','adultes'].forEach(f=>{
+        html += '<td><input type="number" step="1" data-date="'+key+'" data-field="'+f+'" value="'+(rec[f] ?? '')+'"></td>';
+      });
+      html += '</tr>';
+    });
+  });
+  html += '</tbody></table>';
+  if(days.length===0) html = '<div class="empty">Aucun mercredi, vendredi ou dimanche généré (mois invalide).</div>';
+  document.getElementById('entryTableWrap').innerHTML = html;
+
+  document.querySelectorAll('#entryTableWrap input').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      const date = e.target.dataset.date, field = e.target.dataset.field;
+      if(!currentMonthData.jours[date]) currentMonthData.jours[date] = {};
+      currentMonthData.jours[date][field] = num(e.target.value);
+    });
+  });
+}
+
+function weekOptionsHtml(selectedIdx){
+  const days = getChurchDays(cursor.getFullYear(), cursor.getMonth());
+  const weeks = groupIntoWeeks(days);
+  return weeks.map((w,i)=>{
+    const label = 'Semaine '+(i+1)+' ('+w[0].getDate()+'–'+w[w.length-1].getDate()+' '+MONTH_NAMES[cursor.getMonth()].slice(0,3)+'.)';
+    return '<option value="'+i+'"'+(selectedIdx==i?' selected':'')+'>'+label+'</option>';
+  }).join('');
+}
+
+function renderExpenses(){
+  const wrap = document.getElementById('expenseWrap');
+  wrap.innerHTML = '';
+  currentMonthData.depenses.forEach((exp, idx)=>{
+    const row = document.createElement('div');
+    row.className = 'exp-row';
+    row.innerHTML =
+      '<input type="text" data-idx="'+idx+'" data-f="date" placeholder="ex: 12/04" value="'+(exp.date||'')+'">'+
+      '<select data-idx="'+idx+'" data-f="week">'+weekOptionsHtml(exp.week)+'</select>'+
+      '<input type="text" data-idx="'+idx+'" data-f="motif" placeholder="Motif de la dépense" value="'+(exp.motif||'').replace(/"/g,'&quot;')+'">'+
+      '<input type="number" step="1" data-idx="'+idx+'" data-f="montant" placeholder="Montant" value="'+(exp.montant ?? '')+'">'+
+      '<button class="rm" title="Supprimer" onclick="removeExpense('+idx+')">✕</button>';
+    wrap.appendChild(row);
+  });
+  if(currentMonthData.depenses.length===0){
+    wrap.innerHTML = '<div class="empty">Aucune dépense enregistrée ce mois.</div>';
+  }
+  wrap.querySelectorAll('input,select').forEach(el=>{
+    el.addEventListener('change', e=>{
+      const idx = +e.target.dataset.idx, f = e.target.dataset.f;
+      currentMonthData.depenses[idx][f] = (f==='montant'||f==='week') ? (f==='week'? +e.target.value : num(e.target.value)) : e.target.value;
+    });
+  });
+}
+function addExpenseRow(){
+  currentMonthData.depenses.push({date:'', week:0, motif:'', montant:0});
+  renderExpenses();
+}
+function removeExpense(idx){
+  currentMonthData.depenses.splice(idx,1);
+  renderExpenses();
+}
+
+async function saveMonth(){
+  currentMonthData.cotisation = num(document.getElementById('cotisation').value);
+  const balPrecInput = num(document.getElementById('balancePrec').value);
+  currentMonthData.balancePrecManuelle = balPrecInput;
+
+  const report = computeReportForMonth(currentMonthData);
+  currentMonthData.calculatedBalance = report.balanceCaisseLocale;
+
+  const key = ymKey(cursor);
+  const ok = await storeSet('mois:'+key, currentMonthData);
+  const msg = ok ? 'Enregistré ✓' : "Échec de l'enregistrement";
+  document.getElementById('saisie-status').textContent = msg;
+  document.getElementById('saisie-status2').textContent = msg;
+  setTimeout(()=>{document.getElementById('saisie-status').textContent='';document.getElementById('saisie-status2').textContent='';}, 2500);
+}
+
+/* ===================== COMPUTATION ===================== */
+function computeReportForMonth(monthData){
+  const days = getChurchDays(cursor.getFullYear(), cursor.getMonth());
+  const weeks = groupIntoWeeks(days);
+
+  let offrandesTotal=0, dimePasteurTotal=0, dimeEgliseTotal=0, actionsGraceTotal=0, fondEvangTotal=0, enfantsTotal=0, adultesTotal=0;
+
+  const weekRows = weeks.map((w,i)=>{
+    let off=0, ag=0, enf=0, ad=0;
+    w.forEach(d=>{
+      const rec = monthData.jours[isoDate(d)] || {};
+      off += num(rec.offrandes); ag += num(rec.actionsGrace); enf += num(rec.enfants); ad += num(rec.adultes);
+      offrandesTotal += num(rec.offrandes);
+      dimePasteurTotal += num(rec.dimePasteur);
+      dimeEgliseTotal += num(rec.dimeEglise);
+      actionsGraceTotal += num(rec.actionsGrace);
+      fondEvangTotal += num(rec.fondEvangelisation);
+      enfantsTotal += num(rec.enfants);
+      adultesTotal += num(rec.adultes);
+    });
+    const depWeek = monthData.depenses.filter(e=>e.week===i);
+    const depSum = depWeek.reduce((s,e)=>s+num(e.montant),0);
+    const motifs = depWeek.map(e=>e.motif).filter(Boolean).join('; ');
+    return { idx:i+1, offrandes:off, autresRecettes:ag, depenses:depSum, motifs, hasSunday: w.some(d=>d.getDay()===0), enfants:enf, adultes:ad, total:enf+ad };
+  });
+
+  const depensesTotal = monthData.depenses.reduce((s,e)=>s+num(e.montant),0);
+  const dimeOffrandes = offrandesTotal/10;
+  const dimeActionsGrace = actionsGraceTotal/10;
+  const sommeEnvoyee = dimePasteurTotal + dimeEgliseTotal + dimeOffrandes + dimeActionsGrace;
+  const balanceDuMois = (offrandesTotal - dimeOffrandes) + (actionsGraceTotal - dimeActionsGrace) - depensesTotal;
+  const balancePrecedente = (monthData.balancePrecManuelle!==null && monthData.balancePrecManuelle!==undefined) ? monthData.balancePrecManuelle : (config.balanceInit||0);
+  const balanceCaisseLocale = balancePrecedente + balanceDuMois;
+
+  const sundayWeeks = weekRows.filter(w=>w.hasSunday);
+  const moyenne = sundayWeeks.length ? (sundayWeeks.reduce((s,w)=>s+w.total,0)/sundayWeeks.length) : 0;
+
+  return {
+    weekRows, offrandesTotal, dimePasteurTotal, dimeEgliseTotal, actionsGraceTotal, fondEvangTotal,
+    depensesTotal, dimeOffrandes, dimeActionsGrace, sommeEnvoyee, balanceDuMois, balancePrecedente,
+    balanceCaisseLocale, moyenne, cotisation: monthData.cotisation||0
+  };
+}
+
+/* ===================== RAPPORTS TAB ===================== */
+async function shiftReportMonth(delta){
+  reportCursor.setMonth(reportCursor.getMonth()+delta);
+  await renderReports();
+}
+
+async function renderReports(){
+  document.getElementById('rapport-monthLabel').textContent = MONTH_NAMES[reportCursor.getMonth()] + ' ' + reportCursor.getFullYear();
+  const key = ymKey(reportCursor);
+  const data = await storeGet('mois:'+key);
+  const wrap = document.getElementById('reportsWrap');
+  if(!data){
+    wrap.innerHTML = '<div class="empty">Aucune saisie enregistrée pour ce mois. Rendez-vous dans « Saisie mensuelle » pour commencer.</div>';
+    return;
+  }
+  // recompute using reportCursor context: temporarily swap cursor
+  const savedCursor = cursor;
+  cursor = reportCursor;
+  const r = computeReportForMonth(data);
+  cursor = savedCursor;
+
+  const moisLabel = MONTH_NAMES[reportCursor.getMonth()];
+  const annee = reportCursor.getFullYear();
+
+  const weekRowsHtml = r.weekRows.map(w=>
+    '<tr><td>'+w.idx+'ère/ème Semaine</td><td class="num">'+fmt(w.offrandes)+'</td><td class="num">'+fmt(w.autresRecettes)+'</td>'+
+    '<td class="num">'+(w.depenses? fmt(w.depenses):'')+'</td><td class="motif">'+(w.motifs||'')+'</td></tr>'
+  ).join('');
+
+  const attendanceRowsHtml = r.weekRows.map(w=>
+    '<tr><td>'+w.idx+'ère/ème Semaine</td><td class="num">'+fmt(w.enfants)+'</td><td class="num">'+fmt(w.adultes)+'</td><td class="num">'+fmt(w.total)+'</td></tr>'
+  ).join('');
+
+  wrap.innerHTML =
+  '<div class="report">'+
+    '<div class="rhead"><div class="egl">'+(config.nomEglise||'—')+'</div><div class="reg">'+(config.immat||'')+'</div><div class="addr">'+(config.adrSiege||'')+'</div></div>'+
+    '<div class="rtitle">Rapport mensuel des pasteurs / dirigeants</div>'+
+    '<div class="meta-line"><b>Fin du mois de :</b><span>'+moisLabel+'</span></div>'+
+    '<div class="meta-line"><b>Année :</b><span>'+annee+'</span></div>'+
+    '<div class="meta-line"><b>Pasteur/Dirigeant :</b><span>'+(config.pasteur||'')+'</span></div>'+
+    '<div class="meta-line"><b>Adresse :</b><span>'+(config.adrLocale||'')+'</span></div>'+
+    '<div class="meta-line"><b>Nom de l\\'assemblée :</b><span>'+(config.assemblee||'')+'</span></div>'+
+    '<h3 style="font-family:\\'Fraunces\\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">Rapport des collectes et autres recettes d\\'église</h3>'+
+    '<table class="rtable"><thead><tr><th></th><th>Montant des recettes</th><th>Autres recettes</th><th>Dépenses</th><th>Motifs des dépenses</th></tr></thead>'+
+    '<tbody>'+weekRowsHtml+'</tbody></table>'+
+    '<div class="balance-line"><span>Balance en caisse du mois</span><span class="val'+(r.balanceDuMois<0?' neg':'')+'">'+fmt(r.balanceDuMois)+'</span></div>'+
+    '<div class="sig-row"><div><div class="ln">Secrétaire</div></div><div><div class="ln">Pasteur/Dirigeant</div></div></div>'+
+  '</div>'+
+
+  '<div class="report">'+
+    '<div class="rhead"><div class="egl">'+(config.nomEglise||'—')+'</div><div class="reg">'+(config.immat||'')+'</div><div class="addr">'+(config.adrSiege||'')+'</div></div>'+
+    '<div class="rtitle">Rapport mensuel des pasteurs / dirigeants</div>'+
+    '<div class="meta-line"><b>Fin du mois de :</b><span>'+moisLabel+'</span></div>'+
+    '<div class="meta-line"><b>Année :</b><span>'+annee+'</span></div>'+
+    '<div class="meta-line"><b>Pasteur/Dirigeant :</b><span>'+(config.pasteur||'')+'</span></div>'+
+    '<div class="meta-line"><b>Adresse :</b><span>'+(config.adrLocale||'')+'</span></div>'+
+    '<div class="meta-line"><b>Nom de l\\'assemblée :</b><span>'+(config.assemblee||'')+'</span></div>'+
+    '<h3 style="font-family:\\'Fraunces\\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">I. Rapport de réveil — Personnes présentes le dimanche</h3>'+
+    '<table class="rtable"><thead><tr><th></th><th>Enfants</th><th>Adultes</th><th>Total</th></tr></thead>'+
+    '<tbody>'+attendanceRowsHtml+'</tbody>'+
+    '<tfoot><tr><td>Moyenne des personnes présentes le dimanche matin</td><td colspan="3" class="num">'+fmt(r.moyenne)+'</td></tr></tfoot></table>'+
+    '<h3 style="font-family:\\'Fraunces\\',serif; font-size:14px; text-transform:uppercase; letter-spacing:.4px; margin-top:22px;">II. Rapport financier</h3>'+
+    '<ul class="fin-list">'+
+      '<li><b>1. Dîme du pasteur</b><span>'+fmt(r.dimePasteurTotal)+'</span></li>'+
+      '<li><b>2. Dîme de l\\'église</b><span>'+fmt(r.dimeEgliseTotal)+'</span></li>'+
+      '<li><b>3. Offrandes</b><span>'+fmt(r.offrandesTotal)+'</span></li>'+
+      '<li><b>&nbsp;&nbsp;&nbsp;Dîmes des offrandes</b><span>'+fmt(r.dimeOffrandes)+'</span></li>'+
+      '<li><b>4. Actions de grâce</b><span>'+fmt(r.actionsGraceTotal)+'</span></li>'+
+      '<li><b>&nbsp;&nbsp;&nbsp;Dîmes des actions de grâce</b><span>'+fmt(r.dimeActionsGrace)+'</span></li>'+
+      '<li class="extra"><b>Fond d\\'évangélisation (info)</b><span>'+fmt(r.fondEvangTotal)+'</span></li>'+
+      '<li><b>5. Cotisation mensuelle de l\\'église</b><span>'+fmt(r.cotisation)+'</span></li>'+
+      '<li class="sum"><b>6. Somme envoyée au bureau national</b><span>'+fmt(r.sommeEnvoyee)+'</span></li>'+
+      '<li class="extra"><b>Balance en caisse — mois précédent</b><span>'+fmt(r.balancePrecedente)+'</span></li>'+
+      '<li class="extra"><b>Balance en caisse du mois</b><span>'+fmt(r.balanceDuMois)+'</span></li>'+
+    '</ul>'+
+    '<div class="balance-line"><span>7. Balance en caisse de l\\'église locale</span><span class="val'+(r.balanceCaisseLocale<0?' neg':'')+'">'+fmt(r.balanceCaisseLocale)+'</span></div>'+
+    '<div class="sig-row"><div><div class="ln">Secrétaire</div></div><div><div class="ln">Pasteur/Dirigeant</div></div></div>'+
+  '</div>';
+}
+
+/* ===================== TABS & INIT ===================== */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('section.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='saisie') await loadSaisieMonth();
+    if(btn.dataset.tab==='rapports') await renderReports();
+  });
+});
+
+(async function init(){
+  if(APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0){
+    document.querySelector('.wrap').insertAdjacentHTML('afterbegin',
+      '<div style="background:#fdeceb;border:1px solid var(--danger);color:var(--danger);padding:12px 16px;border-radius:8px;margin-bottom:18px;font-size:14px;">'+
+      '⚠ Aucune URL Apps Script configurée. Ouvrez ce fichier index.html, cherchez <code>APPS_SCRIPT_URL</code> en haut du script, et collez-y l\\'URL de votre déploiement Google Apps Script.</div>');
+    return;
+  }
+  await loadConfig();
+  await loadSaisieMonth();
+})();
+</script>
+</body>
+</html>
