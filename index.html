@@ -268,6 +268,23 @@
       </div>
     </div>
 
+    <div class="card">
+      <h2>Mon compte</h2>
+      <p class="hint">Identifiant : <b id="acct-username">—</b>. Vous pouvez changer votre mot de passe ici.</p>
+      <div class="grid">
+        <div class="field">
+          <label>Mot de passe actuel</label>
+          <input type="text" id="acct-oldPassword" autocomplete="current-password">
+        </div>
+        <div class="field">
+          <label>Nouveau mot de passe</label>
+          <input type="text" id="acct-newPassword" autocomplete="new-password">
+        </div>
+      </div>
+      <p id="acct-msg" style="font-size:13px; display:none;"></p>
+      <button class="btn ghost small" onclick="changePassword()">Changer le mot de passe</button>
+    </div>
+
     <div class="savebar">
       <span class="status" id="cfg-status"></span>
       <button class="btn gold" onclick="saveConfig()">Enregistrer les paramètres</button>
@@ -466,8 +483,47 @@ async function enterApp(){
   document.getElementById('app-shell').style.display = 'block';
   document.getElementById('userBadge').textContent = session.username + (session.role==='admin' ? ' · administrateur' : '');
   document.getElementById('adminTabBtn').style.display = session.role === 'admin' ? '' : 'none';
+  document.getElementById('acct-username').textContent = session.username;
   await loadConfig();
   await loadSaisieMonth();
+}
+
+async function changePassword(){
+  const oldPassword = document.getElementById('acct-oldPassword').value;
+  const newPassword = document.getElementById('acct-newPassword').value;
+  const msgEl = document.getElementById('acct-msg');
+  msgEl.style.display = 'none';
+  if(!oldPassword || !newPassword){
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Veuillez renseigner votre mot de passe actuel et le nouveau.';
+    msgEl.style.display = 'block';
+    return;
+  }
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'changePassword', token: session.token, oldPassword, newPassword })
+    });
+    const json = await res.json();
+    if(json && json.error === 'unauthorized'){ await sessionExpired(); return; }
+    if(!json || !json.ok){
+      const messages = { bad_password:'Mot de passe actuel incorrect.', missing_fields:'Veuillez remplir les deux champs.' };
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = messages[json && json.error] || 'Une erreur est survenue.';
+      msgEl.style.display = 'block';
+      return;
+    }
+    msgEl.style.color = 'var(--good)';
+    msgEl.textContent = 'Mot de passe changé ✓';
+    msgEl.style.display = 'block';
+    document.getElementById('acct-oldPassword').value = '';
+    document.getElementById('acct-newPassword').value = '';
+  }catch(e){
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Impossible de contacter le serveur.';
+    msgEl.style.display = 'block';
+  }
 }
 
 /* ===================== STORAGE HELPERS (Google Sheets via Apps Script, scopées par utilisateur) ===================== */
