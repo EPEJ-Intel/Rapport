@@ -186,8 +186,11 @@
     <h2 id="auth-title">Se connecter</h2>
     <p class="hint" id="auth-hint">Accédez à votre registre personnel.</p>
     <div class="field">
-      <label>Identifiant</label>
-      <input type="text" id="auth-username" autocomplete="username">
+      <label id="auth-username-label">Nom de l'assemblée</label>
+      <div class="row" style="gap:0; border:1px solid var(--line); border-radius:7px; overflow:hidden; background:#fffefb;">
+        <span style="padding:9px 0 9px 11px; font-family:'JetBrains Mono', monospace; font-size:14px; color:var(--ink-soft);">EPEJ-</span>
+        <input type="text" id="auth-username" autocomplete="username" style="border:none; border-radius:0; flex:1;" placeholder="Bohicon">
+      </div>
     </div>
     <div class="field">
       <label>Mot de passe</label>
@@ -399,19 +402,20 @@ function saveSessionToStorage(s){
 function toggleAuthMode(){
   authMode = authMode === 'login' ? 'signup' : 'login';
   document.getElementById('auth-title').textContent = authMode === 'login' ? 'Se connecter' : 'Créer un compte';
-  document.getElementById('auth-hint').textContent = authMode === 'login' ? 'Accédez à votre registre personnel.' : 'Choisissez un identifiant et un mot de passe. Le tout premier compte créé devient administrateur.';
+  document.getElementById('auth-hint').textContent = authMode === 'login' ? 'Accédez à votre registre personnel.' : "Indiquez le nom de votre assemblée (l'identifiant complet sera EPEJ-NomDeVotreAssemblée) et choisissez votre propre mot de passe. Le tout premier compte créé devient administrateur.";
   document.getElementById('auth-submit').textContent = authMode === 'login' ? 'Se connecter' : 'Créer le compte';
   document.getElementById('auth-toggle').textContent = authMode === 'login' ? 'Créer un compte à la place' : "J'ai déjà un compte";
   document.getElementById('auth-error').style.display = 'none';
 }
 
 async function submitAuth(){
-  const username = document.getElementById('auth-username').value.trim();
+  const rawInput = document.getElementById('auth-username').value.trim();
+  const username = rawInput ? ('EPEJ-' + rawInput.replace(/^EPEJ-/i,'')) : '';
   const password = document.getElementById('auth-password').value;
   const errEl = document.getElementById('auth-error');
   errEl.style.display = 'none';
-  if(!username || !password){
-    errEl.textContent = 'Veuillez renseigner un identifiant et un mot de passe.';
+  if(!rawInput || !password){
+    errEl.textContent = 'Veuillez renseigner le nom de votre assemblée et un mot de passe.';
     errEl.style.display = 'block';
     return;
   }
