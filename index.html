@@ -186,10 +186,10 @@
     <h2 id="auth-title">Se connecter</h2>
     <p class="hint" id="auth-hint">Accédez à votre registre personnel.</p>
     <div class="field">
-      <label id="auth-username-label">Nom de l'assemblée</label>
+      <label id="auth-username-label">Identifiant</label>
       <div class="row" style="gap:0; border:1px solid var(--line); border-radius:7px; overflow:hidden; background:#fffefb;">
-        <span style="padding:9px 0 9px 11px; font-family:'JetBrains Mono', monospace; font-size:14px; color:var(--ink-soft);">EPEJ-</span>
-        <input type="text" id="auth-username" autocomplete="username" style="border:none; border-radius:0; flex:1;" placeholder="Bohicon">
+        <span id="auth-prefix" style="display:none; padding:9px 0 9px 11px; font-family:'JetBrains Mono', monospace; font-size:14px; color:var(--ink-soft);">EPEJ-</span>
+        <input type="text" id="auth-username" autocomplete="username" style="border:none; border-radius:0; flex:1;" placeholder="admin ou EPEJ-Bohicon">
       </div>
     </div>
     <div class="field">
@@ -254,6 +254,20 @@
           <label>Adresse locale</label>
           <input type="text" id="cfg-adrLocale" placeholder="Bohicon">
         </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Jours de culte</h2>
+      <p class="hint">Choisissez les jours de la semaine où votre église tient un culte. La saisie mensuelle et les rapports s'adapteront automatiquement.</p>
+      <div class="row" id="jourscultewrap" style="gap:14px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px; font-weight:500;"><input type="checkbox" class="jc-check" value="0"> Dimanche</label>
+        <label style="display:flex; align-items:center; gap:6px; font-weight:500;"><input type="checkbox" class="jc-check" value="1"> Lundi</label>
+        <label style="display:flex; align-items:center; gap:6px; font-weight:500;"><input type="checkbox" class="jc-check" value="2"> Mardi</label>
+        <label style="display:flex; align-items:center; gap:6px; font-weight:500;"><input type="checkbox" class="jc-check" value="3"> Mercredi</label>
+        <label style="display:flex; align-items:center; gap:6px; font-weight:500;"><input type="checkbox" class="jc-check" value="4"> Jeudi</label>
+        <label style="display:flex; align-items:center; gap:6px; font-weight:500;"><input type="checkbox" class="jc-check" value="5"> Vendredi</label>
+        <label style="display:flex; align-items:center; gap:6px; font-weight:500;"><input type="checkbox" class="jc-check" value="6"> Samedi</label>
       </div>
     </div>
 
@@ -384,13 +398,19 @@
 <script>
 /* ===================== STATE & CONSTANTS ===================== */
 const DOW = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
-const CHURCH_DAYS = [0,3,5]; // Sun, Wed, Fri
+const DEFAULT_CHURCH_DAYS = [0,3,5]; // Dimanche, Mercredi, Vendredi
 const MONTH_NAMES = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
-let config = { nomEglise:'', immat:'', adrSiege:'', assemblee:'', pasteur:'', adrLocale:'', balanceInit:0 };
+let config = { nomEglise:'', immat:'', adrSiege:'', assemblee:'', pasteur:'', adrLocale:'', balanceInit:0, joursCulte: DEFAULT_CHURCH_DAYS.join(',') };
 let cursor = new Date(); cursor.setDate(1); // saisie month cursor
 let reportCursor = new Date(); reportCursor.setDate(1);
 let currentMonthData = null; // {jours:{}, depenses:[], cotisation:0, balancePrecManuelle:null, calculatedBalance:null}
+
+function churchDaysArray(cfg){
+  const raw = (cfg && cfg.joursCulte) ? String(cfg.joursCulte) : DEFAULT_CHURCH_DAYS.join(',');
+  const arr = raw.split(',').map(s=>parseInt(s,10)).filter(n=>!isNaN(n) && n>=0 && n<=6);
+  return arr.length ? arr : DEFAULT_CHURCH_DAYS;
+}
 
 function pad(n){ return String(n).padStart(2,'0'); }
 function ymKey(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1); }
@@ -418,21 +438,28 @@ function saveSessionToStorage(s){
 
 function toggleAuthMode(){
   authMode = authMode === 'login' ? 'signup' : 'login';
-  document.getElementById('auth-title').textContent = authMode === 'login' ? 'Se connecter' : 'Créer un compte';
-  document.getElementById('auth-hint').textContent = authMode === 'login' ? 'Accédez à votre registre personnel.' : "Indiquez le nom de votre assemblée (l'identifiant complet sera EPEJ-NomDeVotreAssemblée) et choisissez votre propre mot de passe. Le tout premier compte créé devient administrateur.";
-  document.getElementById('auth-submit').textContent = authMode === 'login' ? 'Se connecter' : 'Créer le compte';
-  document.getElementById('auth-toggle').textContent = authMode === 'login' ? 'Créer un compte à la place' : "J'ai déjà un compte";
+  const isSignup = authMode === 'signup';
+  document.getElementById('auth-title').textContent = isSignup ? 'Créer un compte' : 'Se connecter';
+  document.getElementById('auth-hint').textContent = isSignup ? "Indiquez le nom de votre assemblée (l'identifiant complet sera EPEJ-NomDeVotreAssemblée) et choisissez votre propre mot de passe." : 'Accédez à votre registre personnel.';
+  document.getElementById('auth-submit').textContent = isSignup ? 'Créer le compte' : 'Se connecter';
+  document.getElementById('auth-toggle').textContent = isSignup ? "J'ai déjà un compte" : 'Créer un compte à la place';
+  document.getElementById('auth-username-label').textContent = isSignup ? "Nom de l'assemblée" : 'Identifiant';
+  document.getElementById('auth-prefix').style.display = isSignup ? '' : 'none';
+  document.getElementById('auth-username').placeholder = isSignup ? 'Bohicon' : 'admin ou EPEJ-Bohicon';
+  document.getElementById('auth-username').value = '';
   document.getElementById('auth-error').style.display = 'none';
 }
 
 async function submitAuth(){
   const rawInput = document.getElementById('auth-username').value.trim();
-  const username = rawInput ? ('EPEJ-' + rawInput.replace(/^EPEJ-/i,'')) : '';
+  const username = authMode === 'signup'
+    ? (rawInput ? ('EPEJ-' + rawInput.replace(/^EPEJ-/i,'')) : '')
+    : rawInput;
   const password = document.getElementById('auth-password').value;
   const errEl = document.getElementById('auth-error');
   errEl.style.display = 'none';
   if(!rawInput || !password){
-    errEl.textContent = 'Veuillez renseigner le nom de votre assemblée et un mot de passe.';
+    errEl.textContent = authMode==='signup' ? 'Veuillez renseigner le nom de votre assemblée et un mot de passe.' : 'Veuillez renseigner votre identifiant et votre mot de passe.';
     errEl.style.display = 'block';
     return;
   }
@@ -482,13 +509,35 @@ async function enterApp(){
   document.getElementById('view-auth').style.display = 'none';
   document.getElementById('app-shell').style.display = 'block';
   document.getElementById('userBadge').textContent = session.username + (session.role==='admin' ? ' · administrateur' : '');
-  document.getElementById('adminTabBtn').style.display = session.role === 'admin' ? '' : 'none';
-  document.getElementById('acct-username').textContent = session.username;
-  await loadConfig();
-  await loadSaisieMonth();
+
+  const churchTabs = document.querySelectorAll('nav.tabs button[data-tab="config"], nav.tabs button[data-tab="saisie"], nav.tabs button[data-tab="rapports"]');
+  const adminBtn = document.getElementById('adminTabBtn');
+
+  if(session.role === 'admin'){
+    churchTabs.forEach(b=> b.style.display = 'none');
+    adminBtn.style.display = '';
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('section.view').forEach(v=>v.classList.remove('active'));
+    adminBtn.classList.add('active');
+    document.getElementById('view-admin').classList.add('active');
+    await loadAdminUsers();
+  } else {
+    churchTabs.forEach(b=> b.style.display = '');
+    adminBtn.style.display = 'none';
+    document.getElementById('acct-username').textContent = session.username;
+    await loadConfig();
+    await loadSaisieMonth();
+  }
 }
 
 async function changePassword(){
+  if(session.role === 'admin'){
+    const msgEl = document.getElementById('acct-msg');
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = "Le mot de passe administrateur se modifie directement dans la feuille Google Sheet \"Admin\".";
+    msgEl.style.display = 'block';
+    return;
+  }
   const oldPassword = document.getElementById('acct-oldPassword').value;
   const newPassword = document.getElementById('acct-newPassword').value;
   const msgEl = document.getElementById('acct-msg');
@@ -563,12 +612,14 @@ async function sessionExpired(){
 /* ===================== DATE HELPERS ===================== */
 function daysInMonth(year, monthIdx){ return new Date(year, monthIdx+1, 0).getDate(); }
 
+let activeDays = DEFAULT_CHURCH_DAYS; // jours de culte de l'église actuellement affichée
+
 function getChurchDays(year, monthIdx){
   const total = daysInMonth(year, monthIdx);
   const out = [];
   for(let day=1; day<=total; day++){
     const d = new Date(year, monthIdx, day);
-    if(CHURCH_DAYS.includes(d.getDay())) out.push(d);
+    if(activeDays.includes(d.getDay())) out.push(d);
   }
   return out;
 }
@@ -586,9 +637,18 @@ function groupIntoWeeks(dates){
 }
 
 /* ===================== CONFIG TAB ===================== */
+async function fetchChurchConfig(){
+  try{
+    const res = await fetch(APPS_SCRIPT_URL + '?token=' + encodeURIComponent(session.token) + '&action=getChurchConfig');
+    const json = await res.json();
+    if(json && json.error === 'unauthorized'){ await sessionExpired(); return null; }
+    return json || {};
+  }catch(e){ console.error('fetchChurchConfig failed', e); return {}; }
+}
+
 async function loadConfig(){
-  const c = await storeGet('config');
-  if(c) config = c;
+  const c = await fetchChurchConfig();
+  if(c) config = Object.assign({ joursCulte: DEFAULT_CHURCH_DAYS.join(',') }, c);
   document.getElementById('cfg-nomEglise').value = config.nomEglise||'';
   document.getElementById('cfg-immat').value = config.immat||'';
   document.getElementById('cfg-adrSiege').value = config.adrSiege||'';
@@ -596,9 +656,14 @@ async function loadConfig(){
   document.getElementById('cfg-pasteur').value = config.pasteur||'';
   document.getElementById('cfg-adrLocale').value = config.adrLocale||'';
   document.getElementById('cfg-balanceInit').value = config.balanceInit ?? 0;
+  const days = churchDaysArray(config);
+  document.querySelectorAll('.jc-check').forEach(cb=>{ cb.checked = days.includes(parseInt(cb.value,10)); });
+  activeDays = days;
   refreshBrand();
 }
 async function saveConfig(){
+  const checkedDays = Array.from(document.querySelectorAll('.jc-check:checked')).map(cb=>cb.value);
+  const joursCulte = checkedDays.length ? checkedDays.join(',') : DEFAULT_CHURCH_DAYS.join(',');
   config = {
     nomEglise: document.getElementById('cfg-nomEglise').value.trim(),
     immat: document.getElementById('cfg-immat').value.trim(),
@@ -606,9 +671,21 @@ async function saveConfig(){
     assemblee: document.getElementById('cfg-assemblee').value.trim(),
     pasteur: document.getElementById('cfg-pasteur').value.trim(),
     adrLocale: document.getElementById('cfg-adrLocale').value.trim(),
-    balanceInit: num(document.getElementById('cfg-balanceInit').value)
+    balanceInit: num(document.getElementById('cfg-balanceInit').value),
+    joursCulte: joursCulte
   };
-  const ok = await storeSet('config', config);
+  activeDays = churchDaysArray(config);
+  let ok = false;
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify(Object.assign({ action:'updateChurchConfig', token: session.token }, config))
+    });
+    const json = await res.json();
+    if(json && json.error === 'unauthorized'){ await sessionExpired(); return; }
+    ok = !!(json && json.ok);
+  }catch(e){ console.error('saveConfig failed', e); }
   document.getElementById('cfg-status').textContent = ok ? 'Enregistré ✓' : 'Échec de l\'enregistrement';
   refreshBrand();
   setTimeout(()=>document.getElementById('cfg-status').textContent='', 2500);
@@ -881,15 +958,14 @@ async function adminFetch(params){
 async function loadAdminUsers(){
   const json = await adminFetch({ action:'listUsers' });
   const sel = document.getElementById('admin-userSelect');
-  if(!json || !json.users){ sel.innerHTML = '<option>—</option>'; return; }
-  sel.innerHTML = json.users
-    .filter(u=>u.username !== session.username)
-    .map(u=>'<option value="'+u.username+'">'+u.username+(u.role==='admin'?' (admin)':'')+'</option>').join('');
-  if(sel.options.length === 0){
-    sel.innerHTML = '<option value="">Aucun autre utilisateur</option>';
+  if(!json || !json.users || json.users.length === 0){
+    sel.innerHTML = '<option value="">Aucune église inscrite</option>';
+    document.getElementById('admin-monthSelect').innerHTML = '';
     document.getElementById('adminReportsWrap').innerHTML = '';
     return;
   }
+  sel.innerHTML = json.users
+    .map(u=>'<option value="'+u.username+'">'+u.username+(u.assemblee?(' — '+u.assemblee):'')+'</option>').join('');
   await onAdminUserChange();
 }
 
@@ -921,20 +997,21 @@ async function renderAdminReports(){
   const [y,m] = ym.split('-').map(Number);
   const targetCursor = new Date(y, m-1, 1);
 
-  const [cfgJson, dataJson] = await Promise.all([
-    adminFetch({ action:'getFor', username, key:'config' }),
+  const [targetConfig, dataJson] = await Promise.all([
+    adminFetch({ action:'getChurchConfigFor', username }),
     adminFetch({ action:'getFor', username, key:'mois:'+ym })
   ]);
-  const targetConfig = (cfgJson && cfgJson.value) ? JSON.parse(cfgJson.value) : {};
   const targetData = (dataJson && dataJson.value) ? JSON.parse(dataJson.value) : null;
   if(!targetData){ wrap.innerHTML = '<div class="empty">Aucune donnée pour ce mois.</div>'; return; }
 
-  const savedCursor = cursor;
+  const savedCursor = cursor, savedDays = activeDays;
   cursor = targetCursor;
+  activeDays = churchDaysArray(targetConfig);
   const r = computeReportForMonth(targetData);
   cursor = savedCursor;
+  activeDays = savedDays;
 
-  wrap.innerHTML = '<p class="hint no-print">Consultation en lecture seule — compte : <b>'+username+'</b></p>' + buildReportsHtml(targetConfig, r, targetCursor);
+  wrap.innerHTML = '<p class="hint no-print">Consultation en lecture seule — compte : <b>'+username+'</b></p>' + buildReportsHtml(targetConfig || {}, r, targetCursor);
 }
 
 
