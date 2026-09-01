@@ -1,78 +1,231 @@
 /**
- * BACKEND GOOGLE SHEETS — Registre d'église
- * -------------------------------------------------
- * Ce script transforme un Google Sheet en petite API web
- * (clé / valeur) utilisée par le site HTML hébergé sur GitHub Pages.
+ * BACKEND GOOGLE SHEETS — Registre d'église (multi-utilisateurs)
+ * -------------------------------------------------------------
+ * Ajoute des comptes utilisateurs : chaque utilisateur ne voit que
+ * ses propres données ; le premier compte créé devient automatiquement
+ * administrateur et peut CONSULTER (lecture seule) les données de tous.
  *
- * INSTALLATION :
- * 1) Ouvrez (ou créez) un Google Sheet vide.
- * 2) Menu Extensions > Apps Script.
- * 3) Supprimez le contenu par défaut, collez tout ce fichier.
- * 4) Cliquez sur "Déployer" > "Nouveau déploiement".
- *    - Type : "Application Web"
+ * INSTALLATION : identique à la version précédente.
+ * 1) Google Sheet vide > Extensions > Apps Script > collez tout ce fichier.
+ * 2) Déployer > Nouveau déploiement > Application Web
  *    - Exécuter en tant que : Moi
  *    - Qui a accès : Tout le monde
- * 5) Copiez l'URL fournie (elle ressemble à
- *    https://script.google.com/macros/s/XXXXXXX/exec)
- * 6) Collez cette URL dans le fichier index.html, à l'endroit indiqué
- *    (APPS_SCRIPT_URL).
+ * 3) Copiez l'URL /exec dans index.html (APPS_SCRIPT_URL).
  *
- * Le script crée automatiquement une feuille "KV" au premier appel.
+ * ⚠️ Si vous aviez déjà des données saisies avec l'ancienne version
+ * (sans comptes), elles sont stockées dans l'onglet "KV" sans préfixe
+ * utilisateur (clés du type "config", "mois:2026-04"). Après avoir créé
+ * votre compte, renommez manuellement ces lignes dans le Sheet en
+ * "u:VOTRE_IDENTIFIANT:config", "u:VOTRE_IDENTIFIANT:mois:2026-04", etc.
+ * pour les récupérer sous votre compte.
+ *
+ * Feuilles créées automatiquement :
+ *  - Users    : username | salt | passwordHash | role | createdAt
+ *  - Sessions : token | username | role | expiry
+ *  - KV       : key (préfixée "u:<username>:...") | value
  */
 
-function getSheet_() {
+var SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
+
+/* ---------- Feuilles ---------- */
+function getUsersSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('KV');
-  if (!sheet) {
-    sheet = ss.insertSheet('KV');
-    sheet.appendRow(['key', 'value']);
+  var sh = ss.getSheetByName('Users');
+  if (!sh) {
+    sh = ss.insertSheet('Users');
+    sh.appendRow(['username', 'salt', 'passwordHash', 'role', 'createdAt']);
   }
-  return sheet;
+  return sh;
+}
+function getSessionsSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName('Sessions');
+  if (!sh) {
+    sh = ss.insertSheet('Sessions');
+    sh.appendRow(['token', 'username', 'role', 'expiry']);
+  }
+  return sh;
+}
+function getKVSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName('KV');
+  if (!sh) {
+    sh = ss.insertSheet('KV');
+    sh.appendRow(['key', 'value']);
+  }
+  return sh;
 }
 
 function jsonOut_(obj) {
-  return ContentService
-    .createTextOutput(JSON.stringify(obj))
+  return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// GET  ?key=xxx           -> renvoie {key, value}
-// GET  ?action=list&prefix=mois:  -> renvoie {keys:[...]}
-function doGet(e) {
-  var sheet = getSheet_();
-  var data = sheet.getDataRange().getValues();
-
-  if (e.parameter.action === 'list') {
-    var prefix = e.parameter.prefix || '';
-    var keys = [];
-    for (var i = 1; i < data.length; i++) {
-      var k = data[i][0];
-      if (k && k.toString().indexOf(prefix) === 0) keys.push(k);
-    }
-    return jsonOut_({ keys: keys });
-  }
-
-  var key = e.parameter.key;
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === key) {
-      return jsonOut_({ key: key, value: data[i][1] });
-    }
-  }
-  return jsonOut_(null);
+/* ---------- Mots de passe ---------- */
+function hashPassword_(password, salt) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + password, Utilities.Charset.UTF_8);
+  return bytes.map(function (b) { return ((b < 0 ? b + 256 : b).toString(16)).padStart(2, '0'); }).join('');
 }
 
-// POST body (text/plain): {"key":"...", "value":"..."} -> crée ou met à jour
-function doPost(e) {
-  var payload = JSON.parse(e.postData.contents);
-  var sheet = getSheet_();
-  var data = sheet.getDataRange().getValues();
-
+/* ---------- Sessions ---------- */
+function createSession_(username, role) {
+  var token = Utilities.getUuid();
+  var expiry = Date.now() + SESSION_DURATION_MS;
+  getSessionsSheet_().appendRow([token, username, role, expiry]);
+  return token;
+}
+function validateSession_(token) {
+  if (!token) return null;
+  var sh = getSessionsSheet_();
+  var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === payload.key) {
-      sheet.getRange(i + 1, 2).setValue(payload.value);
-      return jsonOut_({ ok: true, updated: true });
+    if (data[i][0] === token) {
+      var expiry = Number(data[i][3]);
+      if (Date.now() > expiry) return null;
+      // session glissante : on prolonge à chaque usage
+      sh.getRange(i + 1, 4).setValue(Date.now() + SESSION_DURATION_MS);
+      return { username: data[i][1], role: data[i][2] };
     }
   }
-  sheet.appendRow([payload.key, payload.value]);
-  return jsonOut_({ ok: true, created: true });
+  return null;
+}
+function deleteSession_(token) {
+  var sh = getSessionsSheet_();
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === token) { sh.deleteRow(i + 1); return; }
+  }
+}
+
+/* ---------- Utilisateurs ---------- */
+function findUserRow_(username) {
+  var sh = getUsersSheet_();
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toLowerCase() === String(username).toLowerCase()) {
+      return { row: i + 1, username: data[i][0], salt: data[i][1], hash: data[i][2], role: data[i][3] };
+    }
+  }
+  return null;
+}
+
+function handleSignup_(payload) {
+  var username = (payload.username || '').trim();
+  var password = payload.password || '';
+  if (!username || !password) return jsonOut_({ ok: false, error: 'missing_fields' });
+  if (findUserRow_(username)) return jsonOut_({ ok: false, error: 'username_taken' });
+
+  var usersSheet = getUsersSheet_();
+  var isFirstUser = usersSheet.getLastRow() <= 1; // seulement l'en-tête présente
+  var role = isFirstUser ? 'admin' : 'user';
+  var salt = Utilities.getUuid();
+  var hash = hashPassword_(password, salt);
+  usersSheet.appendRow([username, salt, hash, role, new Date()]);
+
+  var token = createSession_(username, role);
+  return jsonOut_({ ok: true, token: token, username: username, role: role });
+}
+
+function handleLogin_(payload) {
+  var username = (payload.username || '').trim();
+  var password = payload.password || '';
+  var user = findUserRow_(username);
+  if (!user) return jsonOut_({ ok: false, error: 'unknown_user' });
+  var hash = hashPassword_(password, user.salt);
+  if (hash !== user.hash) return jsonOut_({ ok: false, error: 'bad_password' });
+
+  var token = createSession_(user.username, user.role);
+  return jsonOut_({ ok: true, token: token, username: user.username, role: user.role });
+}
+
+function handleLogout_(payload) {
+  deleteSession_(payload.token);
+  return jsonOut_({ ok: true });
+}
+
+/* ---------- KV scopé utilisateur ---------- */
+function kvGetRaw_(fullKey) {
+  var data = getKVSheet_().getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === fullKey) return data[i][1];
+  }
+  return null;
+}
+function kvSetRaw_(fullKey, value) {
+  var sh = getKVSheet_();
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === fullKey) { sh.getRange(i + 1, 2).setValue(value); return; }
+  }
+  sh.appendRow([fullKey, value]);
+}
+
+function handleGet_(e) {
+  var session = validateSession_(e.parameter.token);
+  if (!session) return jsonOut_({ error: 'unauthorized' });
+  var fullKey = 'u:' + session.username + ':' + e.parameter.key;
+  var value = kvGetRaw_(fullKey);
+  if (value === null) return jsonOut_(null);
+  return jsonOut_({ key: e.parameter.key, value: value });
+}
+
+function handleSet_(payload) {
+  var session = validateSession_(payload.token);
+  if (!session) return jsonOut_({ ok: false, error: 'unauthorized' });
+  var fullKey = 'u:' + session.username + ':' + payload.key;
+  kvSetRaw_(fullKey, payload.value);
+  return jsonOut_({ ok: true });
+}
+
+/* ---------- Administration (lecture seule) ---------- */
+function handleListUsers_(e) {
+  var session = validateSession_(e.parameter.token);
+  if (!session || session.role !== 'admin') return jsonOut_({ error: 'unauthorized' });
+  var data = getUsersSheet_().getDataRange().getValues();
+  var users = [];
+  for (var i = 1; i < data.length; i++) {
+    users.push({ username: data[i][0], role: data[i][3], createdAt: data[i][4] });
+  }
+  return jsonOut_({ users: users });
+}
+
+function handleListKeysFor_(e) {
+  var session = validateSession_(e.parameter.token);
+  if (!session || session.role !== 'admin') return jsonOut_({ error: 'unauthorized' });
+  var targetUser = e.parameter.username;
+  var prefix = 'u:' + targetUser + ':' + (e.parameter.prefix || '');
+  var data = getKVSheet_().getDataRange().getValues();
+  var keys = [];
+  for (var i = 1; i < data.length; i++) {
+    var k = String(data[i][0]);
+    if (k.indexOf(prefix) === 0) keys.push(k.substring(('u:' + targetUser + ':').length));
+  }
+  return jsonOut_({ keys: keys });
+}
+
+function handleGetFor_(e) {
+  var session = validateSession_(e.parameter.token);
+  if (!session || session.role !== 'admin') return jsonOut_({ error: 'unauthorized' });
+  var targetUser = e.parameter.username;
+  var fullKey = 'u:' + targetUser + ':' + e.parameter.key;
+  var value = kvGetRaw_(fullKey);
+  if (value === null) return jsonOut_(null);
+  return jsonOut_({ key: e.parameter.key, value: value });
+}
+
+/* ---------- Routage ---------- */
+function doGet(e) {
+  var action = e.parameter.action;
+  if (action === 'listUsers') return handleListUsers_(e);
+  if (action === 'listKeysFor') return handleListKeysFor_(e);
+  if (action === 'getFor') return handleGetFor_(e);
+  return handleGet_(e);
+}
+
+function doPost(e) {
+  var payload = JSON.parse(e.postData.contents);
+  if (payload.action === 'signup') return handleSignup_(payload);
+  if (payload.action === 'login') return handleLogin_(payload);
+  if (payload.action === 'logout') return handleLogout_(payload);
+  return handleSet_(payload);
 }

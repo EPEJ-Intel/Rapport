@@ -181,12 +181,35 @@
 <body>
 <div class="wrap">
 
+  <!-- ================= AUTH ================= -->
+  <section id="view-auth" class="card" style="max-width:420px; margin:60px auto; display:none;">
+    <h2 id="auth-title">Se connecter</h2>
+    <p class="hint" id="auth-hint">Accédez à votre registre personnel.</p>
+    <div class="field">
+      <label>Identifiant</label>
+      <input type="text" id="auth-username" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Mot de passe</label>
+      <input type="text" id="auth-password" autocomplete="current-password">
+    </div>
+    <p id="auth-error" style="color:var(--danger); font-size:13px; display:none;"></p>
+    <div class="row between">
+      <button class="btn ghost small" id="auth-toggle" onclick="toggleAuthMode()">Créer un compte à la place</button>
+      <button class="btn gold" id="auth-submit" onclick="submitAuth()">Se connecter</button>
+    </div>
+  </section>
+
+  <div id="app-shell" style="display:none;">
+
   <header class="top">
     <div class="brand">
       <div class="mark" id="brandName">Registre d'église</div>
       <div class="sub" id="brandSub">Collectes, dîmes &amp; rapports mensuels</div>
     </div>
     <div class="row no-print">
+      <span class="status" id="userBadge" style="color:var(--ink-soft); font-size:13px;"></span>
+      <button class="btn ghost small" onclick="logout()">Déconnexion</button>
       <button class="btn ghost small" onclick="window.print()">🖨 Imprimer</button>
     </div>
   </header>
@@ -195,6 +218,7 @@
     <button data-tab="config" class="active">⚙ Paramètres</button>
     <button data-tab="saisie">✎ Saisie mensuelle</button>
     <button data-tab="rapports">📄 Rapports</button>
+    <button data-tab="admin" id="adminTabBtn" style="display:none;">🛡 Administration</button>
   </nav>
 
   <!-- ================= CONFIG ================= -->
@@ -314,6 +338,27 @@
     <div id="reportsWrap"></div>
   </section>
 
+  <!-- ================= ADMINISTRATION ================= -->
+  <section class="view" id="view-admin">
+    <div class="card">
+      <h2>Consultation des données (lecture seule)</h2>
+      <p class="hint">Réservé à l'administrateur. Choisissez un utilisateur puis un mois pour afficher ses rapports, tels qu'il les verrait lui-même.</p>
+      <div class="grid">
+        <div class="field">
+          <label>Utilisateur</label>
+          <select id="admin-userSelect" onchange="onAdminUserChange()"></select>
+        </div>
+        <div class="field">
+          <label>Mois enregistré</label>
+          <select id="admin-monthSelect" onchange="renderAdminReports()"></select>
+        </div>
+      </div>
+    </div>
+    <div id="adminReportsWrap"></div>
+  </section>
+
+  </div><!-- /app-shell -->
+
 </div>
 
 <script>
@@ -336,15 +381,101 @@ function fmt(n){
   return n.toLocaleString('fr-FR');
 }
 
-/* ===================== STORAGE HELPERS (Google Sheets via Apps Script) ===================== */
+/* ===================== AUTH STATE ===================== */
+let session = null; // {token, username, role}
+let authMode = 'login'; // 'login' | 'signup'
+
+function loadSessionFromStorage(){
+  try{
+    const raw = localStorage.getItem('registre_session_v1');
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function saveSessionToStorage(s){
+  if(s) localStorage.setItem('registre_session_v1', JSON.stringify(s));
+  else localStorage.removeItem('registre_session_v1');
+}
+
+function toggleAuthMode(){
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('auth-title').textContent = authMode === 'login' ? 'Se connecter' : 'Créer un compte';
+  document.getElementById('auth-hint').textContent = authMode === 'login' ? 'Accédez à votre registre personnel.' : 'Choisissez un identifiant et un mot de passe. Le tout premier compte créé devient administrateur.';
+  document.getElementById('auth-submit').textContent = authMode === 'login' ? 'Se connecter' : 'Créer le compte';
+  document.getElementById('auth-toggle').textContent = authMode === 'login' ? 'Créer un compte à la place' : "J'ai déjà un compte";
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+async function submitAuth(){
+  const username = document.getElementById('auth-username').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('auth-error');
+  errEl.style.display = 'none';
+  if(!username || !password){
+    errEl.textContent = 'Veuillez renseigner un identifiant et un mot de passe.';
+    errEl.style.display = 'block';
+    return;
+  }
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action: authMode, username, password })
+    });
+    const json = await res.json();
+    if(!json || !json.ok){
+      const messages = {
+        username_taken: 'Cet identifiant est déjà pris.',
+        unknown_user: 'Identifiant inconnu.',
+        bad_password: 'Mot de passe incorrect.',
+        missing_fields: 'Veuillez remplir tous les champs.'
+      };
+      errEl.textContent = messages[json && json.error] || "Une erreur est survenue.";
+      errEl.style.display = 'block';
+      return;
+    }
+    session = { token: json.token, username: json.username, role: json.role };
+    saveSessionToStorage(session);
+    await enterApp();
+  }catch(e){
+    errEl.textContent = "Impossible de contacter le serveur. Vérifiez votre connexion.";
+    errEl.style.display = 'block';
+  }
+}
+
+async function logout(){
+  try{
+    if(session) await fetch(APPS_SCRIPT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'logout', token: session.token })
+    });
+  }catch(e){}
+  session = null;
+  saveSessionToStorage(null);
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('view-auth').style.display = 'block';
+  document.getElementById('auth-password').value = '';
+}
+
+async function enterApp(){
+  document.getElementById('view-auth').style.display = 'none';
+  document.getElementById('app-shell').style.display = 'block';
+  document.getElementById('userBadge').textContent = session.username + (session.role==='admin' ? ' · administrateur' : '');
+  document.getElementById('adminTabBtn').style.display = session.role === 'admin' ? '' : 'none';
+  await loadConfig();
+  await loadSaisieMonth();
+}
+
+/* ===================== STORAGE HELPERS (Google Sheets via Apps Script, scopées par utilisateur) ===================== */
 // 👉 Collez ici l'URL de déploiement de votre Apps Script (se termine par /exec)
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwhioWy2A0gPWeVxF4s03t-Ka1zNUDpXiqirI_j9_IfmcSbLUHLVbDc8CFxrRxqnUwa/exec";
 
 async function storeGet(key){
   try{
-    const res = await fetch(APPS_SCRIPT_URL + '?key=' + encodeURIComponent(key));
+    const res = await fetch(APPS_SCRIPT_URL + '?token=' + encodeURIComponent(session.token) + '&key=' + encodeURIComponent(key));
     const json = await res.json();
-    if(!json || json.value === undefined || json.value === null) return null;
+    if(!json || json.error === 'unauthorized'){ await sessionExpired(); return null; }
+    if(json.value === undefined || json.value === null) return null;
     return JSON.parse(json.value);
   }catch(e){ console.error('storage get failed', e); return null; }
 }
@@ -353,11 +484,20 @@ async function storeSet(key, obj){
     const res = await fetch(APPS_SCRIPT_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'}, // évite le préflight CORS
-      body: JSON.stringify({ key: key, value: JSON.stringify(obj) })
+      body: JSON.stringify({ token: session.token, key: key, value: JSON.stringify(obj) })
     });
     const json = await res.json();
+    if(json && json.error === 'unauthorized'){ await sessionExpired(); return false; }
     return !!(json && json.ok);
   }catch(e){ console.error('storage set failed', e); return false; }
+}
+async function sessionExpired(){
+  session = null;
+  saveSessionToStorage(null);
+  document.getElementById('app-shell').style.display = 'none';
+  document.getElementById('view-auth').style.display = 'block';
+  document.getElementById('auth-error').textContent = 'Votre session a expiré, reconnectez-vous.';
+  document.getElementById('auth-error').style.display = 'block';
 }
 
 /* ===================== DATE HELPERS ===================== */
@@ -591,23 +731,9 @@ async function shiftReportMonth(delta){
   await renderReports();
 }
 
-async function renderReports(){
-  document.getElementById('rapport-monthLabel').textContent = MONTH_NAMES[reportCursor.getMonth()] + ' ' + reportCursor.getFullYear();
-  const key = ymKey(reportCursor);
-  const data = await storeGet('mois:'+key);
-  const wrap = document.getElementById('reportsWrap');
-  if(!data){
-    wrap.innerHTML = '<div class="empty">Aucune saisie enregistrée pour ce mois. Rendez-vous dans « Saisie mensuelle » pour commencer.</div>';
-    return;
-  }
-  // recompute using reportCursor context: temporarily swap cursor
-  const savedCursor = cursor;
-  cursor = reportCursor;
-  const r = computeReportForMonth(data);
-  cursor = savedCursor;
-
-  const moisLabel = MONTH_NAMES[reportCursor.getMonth()];
-  const annee = reportCursor.getFullYear();
+function buildReportsHtml(cfg, r, cursorDate){
+  const moisLabel = MONTH_NAMES[cursorDate.getMonth()];
+  const annee = cursorDate.getFullYear();
 
   const weekRowsHtml = r.weekRows.map(w=>
     '<tr><td>'+w.idx+'ère/ème Semaine</td><td class="num">'+fmt(w.offrandes)+'</td><td class="num">'+fmt(w.autresRecettes)+'</td>'+
@@ -618,15 +744,15 @@ async function renderReports(){
     '<tr><td>'+w.idx+'ère/ème Semaine</td><td class="num">'+fmt(w.enfants)+'</td><td class="num">'+fmt(w.adultes)+'</td><td class="num">'+fmt(w.total)+'</td></tr>'
   ).join('');
 
-  wrap.innerHTML =
+  return (
   '<div class="report roomy">'+
-    '<div class="rhead"><div class="egl">'+(config.nomEglise||'—')+'</div><div class="reg">'+(config.immat||'')+'</div><div class="addr">'+(config.adrSiege||'')+'</div></div>'+
+    '<div class="rhead"><div class="egl">'+(cfg.nomEglise||'—')+'</div><div class="reg">'+(cfg.immat||'')+'</div><div class="addr">'+(cfg.adrSiege||'')+'</div></div>'+
     '<div class="rtitle">Rapport mensuel des pasteurs / dirigeants</div>'+
     '<div class="meta-line"><b>Fin du mois de :</b><span>'+moisLabel+'</span></div>'+
     '<div class="meta-line"><b>Année :</b><span>'+annee+'</span></div>'+
-    '<div class="meta-line"><b>Pasteur/Dirigeant :</b><span>'+(config.pasteur||'')+'</span></div>'+
-    '<div class="meta-line"><b>Adresse :</b><span>'+(config.adrLocale||'')+'</span></div>'+
-    '<div class="meta-line"><b>Nom de l\'assemblée :</b><span>'+(config.assemblee||'')+'</span></div>'+
+    '<div class="meta-line"><b>Pasteur/Dirigeant :</b><span>'+(cfg.pasteur||'')+'</span></div>'+
+    '<div class="meta-line"><b>Adresse :</b><span>'+(cfg.adrLocale||'')+'</span></div>'+
+    '<div class="meta-line"><b>Nom de l\'assemblée :</b><span>'+(cfg.assemblee||'')+'</span></div>'+
     '<h3 class="rsub">Rapport des collectes et autres recettes d\'église</h3>'+
     '<table class="rtable"><thead><tr><th></th><th>Montant des recettes</th><th>Autres recettes</th><th>Dépenses</th><th>Motifs des dépenses</th></tr></thead>'+
     '<tbody>'+weekRowsHtml+'</tbody></table>'+
@@ -635,13 +761,13 @@ async function renderReports(){
   '</div>'+
 
   '<div class="report">'+
-    '<div class="rhead"><div class="egl">'+(config.nomEglise||'—')+'</div><div class="reg">'+(config.immat||'')+'</div><div class="addr">'+(config.adrSiege||'')+'</div></div>'+
+    '<div class="rhead"><div class="egl">'+(cfg.nomEglise||'—')+'</div><div class="reg">'+(cfg.immat||'')+'</div><div class="addr">'+(cfg.adrSiege||'')+'</div></div>'+
     '<div class="rtitle">Rapport mensuel des pasteurs / dirigeants</div>'+
     '<div class="meta-line"><b>Fin du mois de :</b><span>'+moisLabel+'</span></div>'+
     '<div class="meta-line"><b>Année :</b><span>'+annee+'</span></div>'+
-    '<div class="meta-line"><b>Pasteur/Dirigeant :</b><span>'+(config.pasteur||'')+'</span></div>'+
-    '<div class="meta-line"><b>Adresse :</b><span>'+(config.adrLocale||'')+'</span></div>'+
-    '<div class="meta-line"><b>Nom de l\'assemblée :</b><span>'+(config.assemblee||'')+'</span></div>'+
+    '<div class="meta-line"><b>Pasteur/Dirigeant :</b><span>'+(cfg.pasteur||'')+'</span></div>'+
+    '<div class="meta-line"><b>Adresse :</b><span>'+(cfg.adrLocale||'')+'</span></div>'+
+    '<div class="meta-line"><b>Nom de l\'assemblée :</b><span>'+(cfg.assemblee||'')+'</span></div>'+
     '<h3 class="rsub">I. Rapport de réveil — Personnes présentes le dimanche</h3>'+
     '<table class="rtable"><thead><tr><th></th><th>Enfants</th><th>Adultes</th><th>Total</th></tr></thead>'+
     '<tbody>'+attendanceRowsHtml+'</tbody>'+
@@ -662,8 +788,95 @@ async function renderReports(){
     '</ul>'+
     '<div class="balance-line"><span>7. Balance en caisse de l\'église locale</span><span class="val'+(r.balanceCaisseLocale<0?' neg':'')+'">'+fmt(r.balanceCaisseLocale)+'</span></div>'+
     '<div class="sig-row"><div><div class="ln">Secrétaire</div></div><div><div class="ln">Pasteur/Dirigeant</div></div></div>'+
-  '</div>';
+  '</div>'
+  );
 }
+
+async function renderReports(){
+  document.getElementById('rapport-monthLabel').textContent = MONTH_NAMES[reportCursor.getMonth()] + ' ' + reportCursor.getFullYear();
+  const key = ymKey(reportCursor);
+  const data = await storeGet('mois:'+key);
+  const wrap = document.getElementById('reportsWrap');
+  if(!data){
+    wrap.innerHTML = '<div class="empty">Aucune saisie enregistrée pour ce mois. Rendez-vous dans « Saisie mensuelle » pour commencer.</div>';
+    return;
+  }
+  // recompute using reportCursor context: temporarily swap cursor
+  const savedCursor = cursor;
+  cursor = reportCursor;
+  const r = computeReportForMonth(data);
+  cursor = savedCursor;
+
+  wrap.innerHTML = buildReportsHtml(config, r, reportCursor);
+}
+
+/* ===================== ADMINISTRATION (lecture seule) ===================== */
+async function adminFetch(params){
+  const url = APPS_SCRIPT_URL + '?token=' + encodeURIComponent(session.token) + '&' +
+    Object.keys(params).map(k=>k+'='+encodeURIComponent(params[k])).join('&');
+  const res = await fetch(url);
+  return res.json();
+}
+
+async function loadAdminUsers(){
+  const json = await adminFetch({ action:'listUsers' });
+  const sel = document.getElementById('admin-userSelect');
+  if(!json || !json.users){ sel.innerHTML = '<option>—</option>'; return; }
+  sel.innerHTML = json.users
+    .filter(u=>u.username !== session.username)
+    .map(u=>'<option value="'+u.username+'">'+u.username+(u.role==='admin'?' (admin)':'')+'</option>').join('');
+  if(sel.options.length === 0){
+    sel.innerHTML = '<option value="">Aucun autre utilisateur</option>';
+    document.getElementById('adminReportsWrap').innerHTML = '';
+    return;
+  }
+  await onAdminUserChange();
+}
+
+async function onAdminUserChange(){
+  const username = document.getElementById('admin-userSelect').value;
+  const monthSel = document.getElementById('admin-monthSelect');
+  if(!username){ monthSel.innerHTML = ''; document.getElementById('adminReportsWrap').innerHTML=''; return; }
+  const json = await adminFetch({ action:'listKeysFor', username, prefix:'mois:' });
+  const keys = (json && json.keys) || [];
+  if(keys.length === 0){
+    monthSel.innerHTML = '<option value="">Aucune saisie</option>';
+    document.getElementById('adminReportsWrap').innerHTML = '<div class="empty">Cet utilisateur n\'a encore rien enregistré.</div>';
+    return;
+  }
+  keys.sort().reverse();
+  monthSel.innerHTML = keys.map(k=>{
+    const ym = k.replace('mois:','');
+    const [y,m] = ym.split('-').map(Number);
+    return '<option value="'+ym+'">'+MONTH_NAMES[m-1]+' '+y+'</option>';
+  }).join('');
+  await renderAdminReports();
+}
+
+async function renderAdminReports(){
+  const username = document.getElementById('admin-userSelect').value;
+  const ym = document.getElementById('admin-monthSelect').value;
+  const wrap = document.getElementById('adminReportsWrap');
+  if(!username || !ym){ wrap.innerHTML=''; return; }
+  const [y,m] = ym.split('-').map(Number);
+  const targetCursor = new Date(y, m-1, 1);
+
+  const [cfgJson, dataJson] = await Promise.all([
+    adminFetch({ action:'getFor', username, key:'config' }),
+    adminFetch({ action:'getFor', username, key:'mois:'+ym })
+  ]);
+  const targetConfig = (cfgJson && cfgJson.value) ? JSON.parse(cfgJson.value) : {};
+  const targetData = (dataJson && dataJson.value) ? JSON.parse(dataJson.value) : null;
+  if(!targetData){ wrap.innerHTML = '<div class="empty">Aucune donnée pour ce mois.</div>'; return; }
+
+  const savedCursor = cursor;
+  cursor = targetCursor;
+  const r = computeReportForMonth(targetData);
+  cursor = savedCursor;
+
+  wrap.innerHTML = '<p class="hint no-print">Consultation en lecture seule — compte : <b>'+username+'</b></p>' + buildReportsHtml(targetConfig, r, targetCursor);
+}
+
 
 /* ===================== TABS & INIT ===================== */
 document.querySelectorAll('nav.tabs button').forEach(btn=>{
@@ -674,7 +887,12 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab==='saisie') await loadSaisieMonth();
     if(btn.dataset.tab==='rapports') await renderReports();
+    if(btn.dataset.tab==='admin') await loadAdminUsers();
   });
+});
+
+document.getElementById('auth-password').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') submitAuth();
 });
 
 (async function init(){
@@ -684,9 +902,15 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
       '⚠ Aucune URL Apps Script configurée. Ouvrez ce fichier index.html, cherchez <code>APPS_SCRIPT_URL</code> en haut du script, et collez-y l\'URL de votre déploiement Google Apps Script.</div>');
     return;
   }
-  await loadConfig();
-  await loadSaisieMonth();
+  const saved = loadSessionFromStorage();
+  if(saved){
+    session = saved;
+    await enterApp();
+  } else {
+    document.getElementById('view-auth').style.display = 'block';
+  }
 })();
+
 </script>
 </body>
 </html>
