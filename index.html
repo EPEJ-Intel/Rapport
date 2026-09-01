@@ -197,6 +197,9 @@
       <input type="text" id="auth-password" autocomplete="current-password">
     </div>
     <p id="auth-error" style="color:var(--danger); font-size:13px; display:none;"></p>
+    <p id="auth-admin-toggle" style="font-size:12.5px; margin:-4px 0 12px;">
+      <a href="#" onclick="toggleAdminLogin();return false;" style="color:var(--ink-soft);" id="auth-admin-toggle-link">Connexion administrateur</a>
+    </p>
     <div class="row between">
       <button class="btn ghost small" id="auth-toggle" onclick="toggleAuthMode()">Créer un compte à la place</button>
       <button class="btn gold" id="auth-submit" onclick="submitAuth()">Se connecter</button>
@@ -424,6 +427,7 @@ function fmt(n){
 /* ===================== AUTH STATE ===================== */
 let session = null; // {token, username, role}
 let authMode = 'login'; // 'login' | 'signup'
+let adminLogin = false; // only relevant when authMode === 'login'
 
 function loadSessionFromStorage(){
   try{
@@ -436,30 +440,51 @@ function saveSessionToStorage(s){
   else localStorage.removeItem('registre_session_v1');
 }
 
-function toggleAuthMode(){
-  authMode = authMode === 'login' ? 'signup' : 'login';
+function refreshAuthUI(){
   const isSignup = authMode === 'signup';
-  document.getElementById('auth-title').textContent = isSignup ? 'Créer un compte' : 'Se connecter';
-  document.getElementById('auth-hint').textContent = isSignup ? "Indiquez le nom de votre assemblée (l'identifiant complet sera EPEJ-NomDeVotreAssemblée) et choisissez votre propre mot de passe." : 'Accédez à votre registre personnel.';
+  const showPrefix = isSignup || (authMode === 'login' && !adminLogin);
+
+  document.getElementById('auth-title').textContent = isSignup ? 'Créer un compte' : (adminLogin ? 'Connexion administrateur' : 'Se connecter');
+  document.getElementById('auth-hint').textContent = isSignup
+    ? "Indiquez le nom de votre assemblée (l'identifiant complet sera EPEJ-NomDeVotreAssemblée) et choisissez votre propre mot de passe."
+    : (adminLogin ? 'Réservé à l\'administrateur.' : 'Accédez au registre de votre église.');
   document.getElementById('auth-submit').textContent = isSignup ? 'Créer le compte' : 'Se connecter';
+  document.getElementById('auth-toggle').style.display = isSignup ? '' : (adminLogin ? 'none' : '');
   document.getElementById('auth-toggle').textContent = isSignup ? "J'ai déjà un compte" : 'Créer un compte à la place';
-  document.getElementById('auth-username-label').textContent = isSignup ? "Nom de l'assemblée" : 'Identifiant';
-  document.getElementById('auth-prefix').style.display = isSignup ? '' : 'none';
-  document.getElementById('auth-username').placeholder = isSignup ? 'Bohicon' : 'admin ou EPEJ-Bohicon';
+  document.getElementById('auth-username-label').textContent = isSignup ? "Nom de l'assemblée" : (adminLogin ? 'Identifiant administrateur' : "Nom de l'assemblée");
+  document.getElementById('auth-prefix').style.display = showPrefix ? '' : 'none';
+  document.getElementById('auth-username').placeholder = (isSignup || (!adminLogin)) ? 'Bohicon' : 'admin';
   document.getElementById('auth-username').value = '';
   document.getElementById('auth-error').style.display = 'none';
+
+  const adminToggleWrap = document.getElementById('auth-admin-toggle');
+  const adminToggleLink = document.getElementById('auth-admin-toggle-link');
+  adminToggleWrap.style.display = isSignup ? 'none' : '';
+  adminToggleLink.textContent = adminLogin ? 'Connexion église à la place' : 'Connexion administrateur';
+}
+
+function toggleAuthMode(){
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  adminLogin = false;
+  refreshAuthUI();
+}
+
+function toggleAdminLogin(){
+  adminLogin = !adminLogin;
+  refreshAuthUI();
 }
 
 async function submitAuth(){
   const rawInput = document.getElementById('auth-username').value.trim();
-  const username = authMode === 'signup'
+  const usesPrefix = authMode === 'signup' || (authMode === 'login' && !adminLogin);
+  const username = usesPrefix
     ? (rawInput ? ('EPEJ-' + rawInput.replace(/^EPEJ-/i,'')) : '')
     : rawInput;
   const password = document.getElementById('auth-password').value;
   const errEl = document.getElementById('auth-error');
   errEl.style.display = 'none';
   if(!rawInput || !password){
-    errEl.textContent = authMode==='signup' ? 'Veuillez renseigner le nom de votre assemblée et un mot de passe.' : 'Veuillez renseigner votre identifiant et votre mot de passe.';
+    errEl.textContent = usesPrefix ? 'Veuillez renseigner le nom de votre assemblée et un mot de passe.' : 'Veuillez renseigner votre identifiant et votre mot de passe.';
     errEl.style.display = 'block';
     return;
   }
@@ -501,6 +526,7 @@ async function logout(){
   session = null;
   saveSessionToStorage(null);
   document.getElementById('app-shell').style.display = 'none';
+  authMode = 'login'; adminLogin = false; refreshAuthUI();
   document.getElementById('view-auth').style.display = 'block';
   document.getElementById('auth-password').value = '';
 }
@@ -604,6 +630,7 @@ async function sessionExpired(){
   session = null;
   saveSessionToStorage(null);
   document.getElementById('app-shell').style.display = 'none';
+  authMode = 'login'; adminLogin = false; refreshAuthUI();
   document.getElementById('view-auth').style.display = 'block';
   document.getElementById('auth-error').textContent = 'Votre session a expiré, reconnectez-vous.';
   document.getElementById('auth-error').style.display = 'block';
@@ -1044,6 +1071,7 @@ document.getElementById('auth-password').addEventListener('keydown', e=>{
     session = saved;
     await enterApp();
   } else {
+    refreshAuthUI();
     document.getElementById('view-auth').style.display = 'block';
   }
 })();
