@@ -72,6 +72,7 @@ function createSession_(username, role) {
   var token = Utilities.getUuid();
   var expiry = Date.now() + SESSION_DURATION_MS;
   getSessionsSheet_().appendRow([token, username, role, expiry]);
+  SpreadsheetApp.flush();
   return token;
 }
 function validateSession_(token) {
@@ -84,6 +85,7 @@ function validateSession_(token) {
       if (Date.now() > expiry) return null;
       // session glissante : on prolonge à chaque usage
       sh.getRange(i + 1, 4).setValue(Date.now() + SESSION_DURATION_MS);
+      SpreadsheetApp.flush();
       return { username: data[i][1], role: data[i][2] };
     }
   }
@@ -93,7 +95,7 @@ function deleteSession_(token) {
   var sh = getSessionsSheet_();
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === token) { sh.deleteRow(i + 1); return; }
+    if (data[i][0] === token) { sh.deleteRow(i + 1); SpreadsheetApp.flush(); return; }
   }
 }
 
