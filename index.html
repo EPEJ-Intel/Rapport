@@ -478,8 +478,8 @@ async function storeGet(key){
   try{
     const res = await fetch(APPS_SCRIPT_URL + '?token=' + encodeURIComponent(session.token) + '&key=' + encodeURIComponent(key));
     const json = await res.json();
-    if(!json || json.error === 'unauthorized'){ await sessionExpired(); return null; }
-    if(json.value === undefined || json.value === null) return null;
+    if(json && json.error === 'unauthorized'){ await sessionExpired(); return null; }
+    if(!json || json.value === undefined || json.value === null) return null;
     return JSON.parse(json.value);
   }catch(e){ console.error('storage get failed', e); return null; }
 }
