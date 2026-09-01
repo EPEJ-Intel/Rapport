@@ -1,42 +1,59 @@
 /**
- * BACKEND GOOGLE SHEETS — Registre d'église (multi-utilisateurs)
- * -------------------------------------------------------------
- * Ajoute des comptes utilisateurs : chaque utilisateur ne voit que
- * ses propres données ; le premier compte créé devient automatiquement
- * administrateur et peut CONSULTER (lecture seule) les données de tous.
+ * BACKEND GOOGLE SHEETS — Registre d'église (admin séparé + une feuille par église)
+ * ---------------------------------------------------------------------------------
+ * ARCHITECTURE :
+ *  - Feuille "Admin"    : identifiants de l'administrateur, en clair, à modifier
+ *                         DIRECTEMENT dans le Sheet (pas d'inscription, pas de hash).
+ *  - Feuille "Churches" : un rang par église (identifiant, mot de passe hashé,
+ *                         infos d'en-tête des rapports, jours de culte, et le nom
+ *                         de SA feuille de données dédiée).
+ *  - Une feuille par église (créée automatiquement à l'inscription) contenant
+ *    uniquement les données mensuelles de cette église (clé/valeur).
  *
- * INSTALLATION : identique à la version précédente.
+ * INSTALLATION :
  * 1) Google Sheet vide > Extensions > Apps Script > collez tout ce fichier.
  * 2) Déployer > Nouveau déploiement > Application Web
  *    - Exécuter en tant que : Moi
  *    - Qui a accès : Tout le monde
  * 3) Copiez l'URL /exec dans index.html (APPS_SCRIPT_URL).
+ * 4) Au premier appel, une feuille "Admin" est créée avec un compte par défaut :
+ *       identifiant : admin       mot de passe : changeme
+ *    Ouvrez cette feuille et changez ces deux valeurs immédiatement.
+ *    C'est la SEULE façon de gérer le compte administrateur — il n'y a pas
+ *    d'inscription possible pour lui, et son mot de passe n'est pas caché :
+ *    modifiez-le directement dans la cellule.
  *
- * ⚠️ Si vous aviez déjà des données saisies avec l'ancienne version
- * (sans comptes), elles sont stockées dans l'onglet "KV" sans préfixe
- * utilisateur (clés du type "config", "mois:2026-04"). Après avoir créé
- * votre compte, renommez manuellement ces lignes dans le Sheet en
- * "u:VOTRE_IDENTIFIANT:config", "u:VOTRE_IDENTIFIANT:mois:2026-04", etc.
- * pour les récupérer sous votre compte.
- *
- * Feuilles créées automatiquement :
- *  - Users    : username | salt | passwordHash | role | createdAt
- *  - Sessions : token | username | role | expiry
- *  - KV       : key (préfixée "u:<username>:...") | value
+ * Chaque église s'inscrit elle-même (identifiant + mot de passe qu'elle choisit).
+ * L'administrateur peut ensuite consulter (lecture seule) les rapports de
+ * n'importe quelle église depuis l'onglet Administration du site.
  */
 
 var SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
+var DEFAULT_JOURS_CULTE = '0,3,5'; // Dimanche, Mercredi, Vendredi
 
-/* ---------- Feuilles ---------- */
-function getUsersSheet_() {
+/* ================= FEUILLES ================= */
+function getAdminSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = ss.getSheetByName('Users');
+  var sh = ss.getSheetByName('Admin');
   if (!sh) {
-    sh = ss.insertSheet('Users');
-    sh.appendRow(['username', 'salt', 'passwordHash', 'role', 'createdAt']);
+    sh = ss.insertSheet('Admin');
+    sh.appendRow(['username', 'password']);
+    sh.appendRow(['admin', 'changeme']);
+    SpreadsheetApp.flush();
   }
   return sh;
 }
+
+function getChurchesSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName('Churches');
+  if (!sh) {
+    sh = ss.insertSheet('Churches');
+    sh.appendRow(['identifiant','salt','passwordHash','nomEglise','immat','adrSiege','assemblee','pasteur','adrLocale','balanceInit','joursCulte','sheetName','createdAt']);
+  }
+  return sh;
+}
+
 function getSessionsSheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName('Sessions');
@@ -46,28 +63,37 @@ function getSessionsSheet_() {
   }
   return sh;
 }
-function getKVSheet_() {
+
+function sanitizeSheetName_(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sh = ss.getSheetByName('KV');
+  var base = String(name).replace(/[:\\\/\?\*\[\]]/g, '-').substring(0, 80) || 'eglise';
+  if (base === 'Admin' || base === 'Churches' || base === 'Sessions') base = base + '-eglise';
+  var candidate = base, i = 1;
+  while (ss.getSheetByName(candidate)) { i++; candidate = base + '-' + i; }
+  return candidate;
+}
+
+function getOrCreateChurchDataSheet_(sheetName) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(sheetName);
   if (!sh) {
-    sh = ss.insertSheet('KV');
+    sh = ss.insertSheet(sheetName);
     sh.appendRow(['key', 'value']);
   }
   return sh;
 }
 
 function jsonOut_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/* ---------- Mots de passe ---------- */
+/* ================= MOTS DE PASSE (églises uniquement) ================= */
 function hashPassword_(password, salt) {
   var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + ':' + password, Utilities.Charset.UTF_8);
   return bytes.map(function (b) { return ((b < 0 ? b + 256 : b).toString(16)).padStart(2, '0'); }).join('');
 }
 
-/* ---------- Sessions ---------- */
+/* ================= SESSIONS ================= */
 function createSession_(username, role) {
   var token = Utilities.getUuid();
   var expiry = Date.now() + SESSION_DURATION_MS;
@@ -83,8 +109,7 @@ function validateSession_(token) {
     if (data[i][0] === token) {
       var expiry = Number(data[i][3]);
       if (Date.now() > expiry) return null;
-      // session glissante : on prolonge à chaque usage
-      sh.getRange(i + 1, 4).setValue(Date.now() + SESSION_DURATION_MS);
+      sh.getRange(i + 1, 4).setValue(Date.now() + SESSION_DURATION_MS); // session glissante
       SpreadsheetApp.flush();
       return { username: data[i][1], role: data[i][2] };
     }
@@ -99,45 +124,82 @@ function deleteSession_(token) {
   }
 }
 
-/* ---------- Utilisateurs ---------- */
-function findUserRow_(username) {
-  var sh = getUsersSheet_();
+/* ================= RECHERCHE DE COMPTES ================= */
+function findAdminRow_(username) {
+  var data = getAdminSheet_().getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(username)) return { username: data[i][0], password: data[i][1] };
+  }
+  return null;
+}
+
+var CH = { IDENT:0, SALT:1, HASH:2, NOM:3, IMMAT:4, ADRSIEGE:5, ASSEMBLEE:6, PASTEUR:7, ADRLOCALE:8, BALANCEINIT:9, JOURS:10, SHEET:11, CREATED:12 };
+
+function findChurchRow_(identifiant) {
+  var sh = getChurchesSheet_();
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    if (String(data[i][0]).toLowerCase() === String(username).toLowerCase()) {
-      return { row: i + 1, username: data[i][0], salt: data[i][1], hash: data[i][2], role: data[i][3] };
+    if (String(data[i][CH.IDENT]).toLowerCase() === String(identifiant).toLowerCase()) {
+      var r = data[i];
+      return {
+        row: i + 1, identifiant: r[CH.IDENT], salt: r[CH.SALT], hash: r[CH.HASH],
+        nomEglise: r[CH.NOM], immat: r[CH.IMMAT], adrSiege: r[CH.ADRSIEGE], assemblee: r[CH.ASSEMBLEE],
+        pasteur: r[CH.PASTEUR], adrLocale: r[CH.ADRLOCALE], balanceInit: r[CH.BALANCEINIT],
+        joursCulte: r[CH.JOURS], sheetName: r[CH.SHEET], createdAt: r[CH.CREATED]
+      };
     }
   }
   return null;
 }
 
-function handleSignup_(payload) {
-  var username = (payload.username || '').trim();
-  var password = payload.password || '';
-  if (!username || !password) return jsonOut_({ ok: false, error: 'missing_fields' });
-  if (findUserRow_(username)) return jsonOut_({ ok: false, error: 'username_taken' });
+function churchPublicConfig_(c) {
+  return {
+    nomEglise: c.nomEglise, immat: c.immat, adrSiege: c.adrSiege, assemblee: c.assemblee,
+    pasteur: c.pasteur, adrLocale: c.adrLocale, balanceInit: c.balanceInit, joursCulte: c.joursCulte
+  };
+}
 
-  var usersSheet = getUsersSheet_();
-  var isFirstUser = usersSheet.getLastRow() <= 1; // seulement l'en-tête présente
-  var role = isFirstUser ? 'admin' : 'user';
+/* ================= INSCRIPTION / CONNEXION (églises) ================= */
+function handleSignup_(payload) {
+  var identifiant = (payload.username || '').trim();
+  var password = payload.password || '';
+  if (!identifiant || !password) return jsonOut_({ ok: false, error: 'missing_fields' });
+  if (findChurchRow_(identifiant)) return jsonOut_({ ok: false, error: 'username_taken' });
+  if (findAdminRow_(identifiant)) return jsonOut_({ ok: false, error: 'username_taken' });
+
   var salt = Utilities.getUuid();
   var hash = hashPassword_(password, salt);
-  usersSheet.appendRow([username, salt, hash, role, new Date()]);
+  var sheetName = sanitizeSheetName_(identifiant);
+  getOrCreateChurchDataSheet_(sheetName);
 
-  var token = createSession_(username, role);
-  return jsonOut_({ ok: true, token: token, username: username, role: role });
+  getChurchesSheet_().appendRow([
+    identifiant, salt, hash,
+    '', '', '', '', '', '', 0, DEFAULT_JOURS_CULTE, sheetName, new Date()
+  ]);
+  SpreadsheetApp.flush();
+
+  var token = createSession_(identifiant, 'user');
+  return jsonOut_({ ok: true, token: token, username: identifiant, role: 'user' });
 }
 
 function handleLogin_(payload) {
-  var username = (payload.username || '').trim();
+  var identifiant = (payload.username || '').trim();
   var password = payload.password || '';
-  var user = findUserRow_(username);
-  if (!user) return jsonOut_({ ok: false, error: 'unknown_user' });
-  var hash = hashPassword_(password, user.salt);
-  if (hash !== user.hash) return jsonOut_({ ok: false, error: 'bad_password' });
 
-  var token = createSession_(user.username, user.role);
-  return jsonOut_({ ok: true, token: token, username: user.username, role: user.role });
+  var admin = findAdminRow_(identifiant);
+  if (admin) {
+    if (String(password) !== String(admin.password)) return jsonOut_({ ok: false, error: 'bad_password' });
+    var tokenA = createSession_(admin.username, 'admin');
+    return jsonOut_({ ok: true, token: tokenA, username: admin.username, role: 'admin' });
+  }
+
+  var church = findChurchRow_(identifiant);
+  if (!church) return jsonOut_({ ok: false, error: 'unknown_user' });
+  var hash = hashPassword_(password, church.salt);
+  if (hash !== church.hash) return jsonOut_({ ok: false, error: 'bad_password' });
+
+  var token = createSession_(church.identifiant, 'user');
+  return jsonOut_({ ok: true, token: token, username: church.identifiant, role: 'user' });
 }
 
 function handleLogout_(payload) {
@@ -145,62 +207,123 @@ function handleLogout_(payload) {
   return jsonOut_({ ok: true });
 }
 
-/* ---------- KV scopé utilisateur ---------- */
-function kvGetRaw_(fullKey) {
-  var data = getKVSheet_().getDataRange().getValues();
+function handleChangePassword_(payload) {
+  var session = validateSession_(payload.token);
+  if (!session) return jsonOut_({ ok: false, error: 'unauthorized' });
+  if (session.role === 'admin') return jsonOut_({ ok: false, error: 'admin_edit_in_sheet' });
+
+  var church = findChurchRow_(session.username);
+  if (!church) return jsonOut_({ ok: false, error: 'unknown_user' });
+  var oldHash = hashPassword_(payload.oldPassword || '', church.salt);
+  if (oldHash !== church.hash) return jsonOut_({ ok: false, error: 'bad_password' });
+  if (!payload.newPassword) return jsonOut_({ ok: false, error: 'missing_fields' });
+
+  var newSalt = Utilities.getUuid();
+  var newHash = hashPassword_(payload.newPassword, newSalt);
+  var sh = getChurchesSheet_();
+  sh.getRange(church.row, CH.SALT + 1).setValue(newSalt);
+  sh.getRange(church.row, CH.HASH + 1).setValue(newHash);
+  SpreadsheetApp.flush();
+  return jsonOut_({ ok: true });
+}
+
+/* ================= CONFIGURATION DE L'ÉGLISE (registre Churches) ================= */
+function handleGetChurchConfig_(e) {
+  var session = validateSession_(e.parameter.token);
+  if (!session || session.role !== 'user') return jsonOut_({ error: 'unauthorized' });
+  var church = findChurchRow_(session.username);
+  if (!church) return jsonOut_({ error: 'unauthorized' });
+  return jsonOut_(churchPublicConfig_(church));
+}
+
+function handleUpdateChurchConfig_(payload) {
+  var session = validateSession_(payload.token);
+  if (!session || session.role !== 'user') return jsonOut_({ ok: false, error: 'unauthorized' });
+  var church = findChurchRow_(session.username);
+  if (!church) return jsonOut_({ ok: false, error: 'unauthorized' });
+  var sh = getChurchesSheet_();
+  var row = church.row;
+  sh.getRange(row, CH.NOM + 1).setValue(payload.nomEglise || '');
+  sh.getRange(row, CH.IMMAT + 1).setValue(payload.immat || '');
+  sh.getRange(row, CH.ADRSIEGE + 1).setValue(payload.adrSiege || '');
+  sh.getRange(row, CH.ASSEMBLEE + 1).setValue(payload.assemblee || '');
+  sh.getRange(row, CH.PASTEUR + 1).setValue(payload.pasteur || '');
+  sh.getRange(row, CH.ADRLOCALE + 1).setValue(payload.adrLocale || '');
+  sh.getRange(row, CH.BALANCEINIT + 1).setValue(Number(payload.balanceInit) || 0);
+  sh.getRange(row, CH.JOURS + 1).setValue(payload.joursCulte || DEFAULT_JOURS_CULTE);
+  SpreadsheetApp.flush();
+  return jsonOut_({ ok: true });
+}
+
+/* ================= KV scopé à la feuille de l'église ================= */
+function kvGetRaw_(sheetName, key) {
+  var sh = getOrCreateChurchDataSheet_(sheetName);
+  var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === fullKey) return data[i][1];
+    if (data[i][0] === key) return data[i][1];
   }
   return null;
 }
-function kvSetRaw_(fullKey, value) {
-  var sh = getKVSheet_();
+function kvSetRaw_(sheetName, key, value) {
+  var sh = getOrCreateChurchDataSheet_(sheetName);
   var data = sh.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === fullKey) { sh.getRange(i + 1, 2).setValue(value); return; }
+    if (data[i][0] === key) { sh.getRange(i + 1, 2).setValue(value); return; }
   }
-  sh.appendRow([fullKey, value]);
+  sh.appendRow([key, value]);
 }
 
 function handleGet_(e) {
   var session = validateSession_(e.parameter.token);
-  if (!session) return jsonOut_({ error: 'unauthorized' });
-  var fullKey = 'u:' + session.username + ':' + e.parameter.key;
-  var value = kvGetRaw_(fullKey);
+  if (!session || session.role !== 'user') return jsonOut_({ error: 'unauthorized' });
+  var church = findChurchRow_(session.username);
+  if (!church) return jsonOut_({ error: 'unauthorized' });
+  var value = kvGetRaw_(church.sheetName, e.parameter.key);
   if (value === null) return jsonOut_(null);
   return jsonOut_({ key: e.parameter.key, value: value });
 }
 
 function handleSet_(payload) {
   var session = validateSession_(payload.token);
-  if (!session) return jsonOut_({ ok: false, error: 'unauthorized' });
-  var fullKey = 'u:' + session.username + ':' + payload.key;
-  kvSetRaw_(fullKey, payload.value);
+  if (!session || session.role !== 'user') return jsonOut_({ ok: false, error: 'unauthorized' });
+  var church = findChurchRow_(session.username);
+  if (!church) return jsonOut_({ ok: false, error: 'unauthorized' });
+  kvSetRaw_(church.sheetName, payload.key, payload.value);
   return jsonOut_({ ok: true });
 }
 
-/* ---------- Administration (lecture seule) ---------- */
+/* ================= ADMINISTRATION (lecture seule) ================= */
 function handleListUsers_(e) {
   var session = validateSession_(e.parameter.token);
   if (!session || session.role !== 'admin') return jsonOut_({ error: 'unauthorized' });
-  var data = getUsersSheet_().getDataRange().getValues();
+  var data = getChurchesSheet_().getDataRange().getValues();
   var users = [];
   for (var i = 1; i < data.length; i++) {
-    users.push({ username: data[i][0], role: data[i][3], createdAt: data[i][4] });
+    users.push({ username: data[i][CH.IDENT], assemblee: data[i][CH.ASSEMBLEE], createdAt: data[i][CH.CREATED] });
   }
   return jsonOut_({ users: users });
+}
+
+function handleGetChurchConfigFor_(e) {
+  var session = validateSession_(e.parameter.token);
+  if (!session || session.role !== 'admin') return jsonOut_({ error: 'unauthorized' });
+  var church = findChurchRow_(e.parameter.username);
+  if (!church) return jsonOut_({ error: 'not_found' });
+  return jsonOut_(churchPublicConfig_(church));
 }
 
 function handleListKeysFor_(e) {
   var session = validateSession_(e.parameter.token);
   if (!session || session.role !== 'admin') return jsonOut_({ error: 'unauthorized' });
-  var targetUser = e.parameter.username;
-  var prefix = 'u:' + targetUser + ':' + (e.parameter.prefix || '');
-  var data = getKVSheet_().getDataRange().getValues();
+  var church = findChurchRow_(e.parameter.username);
+  if (!church) return jsonOut_({ keys: [] });
+  var prefix = e.parameter.prefix || '';
+  var sh = getOrCreateChurchDataSheet_(church.sheetName);
+  var data = sh.getDataRange().getValues();
   var keys = [];
   for (var i = 1; i < data.length; i++) {
     var k = String(data[i][0]);
-    if (k.indexOf(prefix) === 0) keys.push(k.substring(('u:' + targetUser + ':').length));
+    if (k.indexOf(prefix) === 0) keys.push(k);
   }
   return jsonOut_({ keys: keys });
 }
@@ -208,19 +331,21 @@ function handleListKeysFor_(e) {
 function handleGetFor_(e) {
   var session = validateSession_(e.parameter.token);
   if (!session || session.role !== 'admin') return jsonOut_({ error: 'unauthorized' });
-  var targetUser = e.parameter.username;
-  var fullKey = 'u:' + targetUser + ':' + e.parameter.key;
-  var value = kvGetRaw_(fullKey);
+  var church = findChurchRow_(e.parameter.username);
+  if (!church) return jsonOut_(null);
+  var value = kvGetRaw_(church.sheetName, e.parameter.key);
   if (value === null) return jsonOut_(null);
   return jsonOut_({ key: e.parameter.key, value: value });
 }
 
-/* ---------- Routage ---------- */
+/* ================= ROUTAGE ================= */
 function doGet(e) {
   var action = e.parameter.action;
   if (action === 'listUsers') return handleListUsers_(e);
   if (action === 'listKeysFor') return handleListKeysFor_(e);
   if (action === 'getFor') return handleGetFor_(e);
+  if (action === 'getChurchConfig') return handleGetChurchConfig_(e);
+  if (action === 'getChurchConfigFor') return handleGetChurchConfigFor_(e);
   return handleGet_(e);
 }
 
@@ -229,5 +354,7 @@ function doPost(e) {
   if (payload.action === 'signup') return handleSignup_(payload);
   if (payload.action === 'login') return handleLogin_(payload);
   if (payload.action === 'logout') return handleLogout_(payload);
+  if (payload.action === 'changePassword') return handleChangePassword_(payload);
+  if (payload.action === 'updateChurchConfig') return handleUpdateChurchConfig_(payload);
   return handleSet_(payload);
 }
