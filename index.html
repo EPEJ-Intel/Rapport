@@ -2,8 +2,16 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Registre d'église — Rapports mensuels</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1f8f2e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="EPEJ Registre">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>EPEJ — Registre d'église</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -176,6 +184,42 @@
     .report{box-shadow:none; border:none; padding:0; max-width:none; page-break-after:always; page-break-inside:avoid;}
     .report + .report{margin-top:0;}
   }
+
+  /* ===== APPLI INSTALLABLE : toutes orientations, encoches, mobile & ordinateur ===== */
+  html{ -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  body{ min-height:100vh; min-height:100dvh; overscroll-behavior-y:none; }
+  .wrap{
+    padding-top:max(28px, env(safe-area-inset-top));
+    padding-right:max(20px, env(safe-area-inset-right));
+    padding-bottom:max(80px, calc(env(safe-area-inset-bottom) + 40px));
+    padding-left:max(20px, env(safe-area-inset-left));
+  }
+  .btn, nav.tabs button{ min-height:40px; touch-action:manipulation; }
+  input[type=text], input[type=number], input[type=month], select, textarea{ font-size:16px; } /* évite le zoom auto sur iPhone */
+  #entryTableWrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  #entryTableWrap table.entry{ min-width:620px; }
+  .savebar{ padding-bottom:max(0px, env(safe-area-inset-bottom)); }
+  @media (max-width:720px){
+    header.top{ flex-direction:column; align-items:stretch; gap:10px; }
+    nav.tabs{ flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+    nav.tabs button{ white-space:nowrap; flex:0 0 auto; }
+    .card{ padding:16px 14px; }
+    .month-nav .label{ min-width:0; font-size:17px; }
+  }
+  @media (orientation:landscape) and (max-height:520px){
+    .wrap{ padding-top:max(12px, env(safe-area-inset-top)); }
+    header.top{ margin-bottom:12px; padding-bottom:8px; }
+    nav.tabs{ margin-bottom:12px; }
+    #view-auth{ margin-top:12px !important; }
+  }
+  @media (min-width:1100px){ .wrap{ max-width:1100px; } }
+  @media (display-mode:standalone){ body{ -webkit-user-select:none; user-select:none; } input,textarea,.report{ -webkit-user-select:text; user-select:text; } }
+
+  #syncBadge{ font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--ink-soft); white-space:nowrap; }
+  #syncBadge.ok{ color:var(--good); border-color:var(--good); }
+  #syncBadge.wait{ color:#9a6a00; border-color:#d7a300; background:#fff8e1; }
+  #syncBadge.off{ color:var(--danger); border-color:var(--danger); background:#fdeceb; }
+  #iosHint{ display:none; position:fixed; left:12px; right:12px; bottom:max(12px, env(safe-area-inset-bottom)); z-index:50; background:#fff; border:2px solid #1f8f2e; border-radius:12px; padding:12px 14px; font-size:14px; box-shadow:0 8px 28px rgba(0,0,0,.25); }
 </style>
 </head>
 <body>
@@ -183,6 +227,7 @@
 
   <!-- ================= AUTH ================= -->
   <section id="view-auth" class="card" style="max-width:420px; margin:60px auto; display:none;">
+    <div style="text-align:center; margin-bottom:10px;"><img src="icons/icon-192.png" alt="EPEJ" width="96" height="96" style="border-radius:20px;"></div>
     <h2 id="auth-title">Se connecter</h2>
     <p class="hint" id="auth-hint">Accédez à votre registre personnel.</p>
     <div class="field">
@@ -209,12 +254,17 @@
   <div id="app-shell" style="display:none;">
 
   <header class="top">
-    <div class="brand">
+    <div class="brand" style="flex-direction:row; align-items:center; gap:12px;">
+      <img src="icons/icon-192.png" alt="EPEJ" width="52" height="52" style="border-radius:12px; flex:0 0 auto;">
+      <div style="display:flex; flex-direction:column; gap:2px; min-width:0;">
       <div class="mark" id="brandName">Registre d'église</div>
       <div class="sub" id="brandSub">Collectes, dîmes &amp; rapports mensuels</div>
+      </div>
     </div>
     <div class="row no-print">
+      <span id="syncBadge" class="ok" title="État de la synchronisation avec le Google Sheet">● En ligne</span>
       <span class="status" id="userBadge" style="color:var(--ink-soft); font-size:13px;"></span>
+      <button class="btn gold small" id="installBtn" style="display:none;" onclick="installApp()">⬇ Installer l'appli</button>
       <button class="btn ghost small" onclick="logout()">Déconnexion</button>
       <button class="btn ghost small" onclick="window.print()">🖨 Imprimer</button>
     </div>
@@ -300,6 +350,17 @@
       </div>
       <p id="acct-msg" style="font-size:13px; display:none;"></p>
       <button class="btn ghost small" onclick="changePassword()">Changer le mot de passe</button>
+    </div>
+
+    <div class="card">
+      <h2>Sauvegarde des données</h2>
+      <p class="hint">Vos données sont déjà gardées sur cet appareil <b>et</b> dans le Google Sheet. Cette sauvegarde est une copie de sécurité supplémentaire (fichier) que vous pouvez conserver ou restaurer sur un autre téléphone ou ordinateur.</p>
+      <div class="row">
+        <button class="btn ghost small" onclick="exportBackup()">⬇ Télécharger une sauvegarde</button>
+        <button class="btn ghost small" onclick="document.getElementById('importFile').click()">⬆ Restaurer une sauvegarde</button>
+        <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importBackup(this)">
+      </div>
+      <p id="backup-msg" style="font-size:13px; display:none; margin:10px 0 0;"></p>
     </div>
 
     <div class="savebar">
@@ -529,6 +590,7 @@ async function logout(){
   authMode = 'login'; adminLogin = false; refreshAuthUI();
   document.getElementById('view-auth').style.display = 'block';
   document.getElementById('auth-password').value = '';
+  /* les données locales de cet utilisateur restent sur l'appareil : rien n'est effacé */
 }
 
 async function enterApp(){
@@ -553,6 +615,9 @@ async function enterApp(){
     document.getElementById('acct-username').textContent = session.username;
     await loadConfig();
     await loadSaisieMonth();
+    updateSyncBadge();
+    flushPending();
+    prefetchMonths();
   }
 }
 
@@ -605,26 +670,72 @@ async function changePassword(){
 // 👉 Collez ici l'URL de déploiement de votre Apps Script (se termine par /exec)
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwhioWy2A0gPWeVxF4s03t-Ka1zNUDpXiqirI_j9_IfmcSbLUHLVbDc8CFxrRxqnUwa/exec";
 
+/* ===== COUCHE HORS-LIGNE : copie locale + file d'envoi =====
+   Règle d'or : chaque enregistrement est d'abord écrit sur l'appareil (jamais perdu),
+   puis envoyé au Google Sheet. Sans réseau, l'envoi est mis en attente et repart tout seul. */
+const LS_PREFIX = 'epej_v1:';
+function uKey(k){ return LS_PREFIX + (session ? session.username : '_') + ':' + k; }
+function lsGet(k){ try{ const r = localStorage.getItem(uKey(k)); return r ? JSON.parse(r) : null; }catch(e){ return null; } }
+function lsSet(k, v){ try{ localStorage.setItem(uKey(k), JSON.stringify(v)); return true; }catch(e){ console.error('local save failed', e); return false; } }
+function getPending(){ return lsGet('__pending') || {}; }
+function setPending(p){ lsSet('__pending', p); updateSyncBadge(); }
+let lastSaveSynced = true;
+let flushing = false;
+
+function updateSyncBadge(){
+  const el = document.getElementById('syncBadge'); if(!el) return;
+  const n = session ? Object.keys(getPending()).length : 0;
+  if(!navigator.onLine){ el.className='off'; el.textContent = '● Hors ligne' + (n ? ' · '+n+' en attente' : ''); }
+  else if(n){ el.className='wait'; el.textContent = '● '+n+' en attente d\'envoi'; }
+  else { el.className='ok'; el.textContent = '● Synchronisé'; }
+}
+
+async function flushPending(){
+  if(flushing || !session || !navigator.onLine) return;
+  flushing = true;
+  try{
+    let pend = getPending();
+    for(const pk of Object.keys(pend)){
+      const item = pend[pk];
+      let body;
+      if(item.type === 'config') body = Object.assign({ action:'updateChurchConfig', token: session.token }, item.value);
+      else body = { token: session.token, key: item.key, value: JSON.stringify(item.value) };
+      let json;
+      try{
+        const res = await fetch(APPS_SCRIPT_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(body) });
+        json = await res.json();
+      }catch(e){ break; }                       // réseau coupé : on garde tout, on réessaiera
+      if(json && json.error === 'unauthorized') break; // session expirée : on garde tout jusqu'à la reconnexion
+      if(json && json.ok){
+        const now = getPending();
+        if(now[pk] && now[pk].ts === item.ts) delete now[pk]; // ne pas effacer une modif plus récente
+        setPending(now);
+      } else break;
+    }
+  } finally { flushing = false; updateSyncBadge(); }
+}
+
 async function storeGet(key){
+  const pend = getPending()['kv:'+key];
+  if(pend){ flushPending(); return pend.value; }   // modif locale pas encore envoyée = la plus récente
   try{
     const res = await fetch(APPS_SCRIPT_URL + '?token=' + encodeURIComponent(session.token) + '&key=' + encodeURIComponent(key));
     const json = await res.json();
     if(json && json.error === 'unauthorized'){ await sessionExpired(); return null; }
-    if(!json || json.value === undefined || json.value === null) return null;
-    return JSON.parse(json.value);
-  }catch(e){ console.error('storage get failed', e); return null; }
+    if(!json || json.value === undefined || json.value === null) return lsGet('kv:'+key);
+    const v = JSON.parse(json.value);
+    lsSet('kv:'+key, v);
+    return v;
+  }catch(e){ console.warn('storage get offline -> copie locale', e); return lsGet('kv:'+key); }
 }
 async function storeSet(key, obj){
-  try{
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'}, // évite le préflight CORS
-      body: JSON.stringify({ token: session.token, key: key, value: JSON.stringify(obj) })
-    });
-    const json = await res.json();
-    if(json && json.error === 'unauthorized'){ await sessionExpired(); return false; }
-    return !!(json && json.ok);
-  }catch(e){ console.error('storage set failed', e); return false; }
+  if(!lsSet('kv:'+key, obj)) return false;          // espace local plein : on le dit
+  const p = getPending();
+  p['kv:'+key] = { type:'kv', key:key, value:obj, ts:Date.now() };
+  setPending(p);
+  await flushPending();
+  lastSaveSynced = !getPending()['kv:'+key];
+  return true;                                      // sauvegardé au minimum sur l'appareil
 }
 async function sessionExpired(){
   session = null;
@@ -665,12 +776,15 @@ function groupIntoWeeks(dates){
 
 /* ===================== CONFIG TAB ===================== */
 async function fetchChurchConfig(){
+  const pend = getPending()['config'];
+  if(pend){ flushPending(); return pend.value; }
   try{
     const res = await fetch(APPS_SCRIPT_URL + '?token=' + encodeURIComponent(session.token) + '&action=getChurchConfig');
     const json = await res.json();
     if(json && json.error === 'unauthorized'){ await sessionExpired(); return null; }
-    return json || {};
-  }catch(e){ console.error('fetchChurchConfig failed', e); return {}; }
+    if(json && !json.error){ lsSet('config', json); return json; }
+    return lsGet('config') || {};
+  }catch(e){ console.warn('fetchChurchConfig offline -> copie locale', e); return lsGet('config') || {}; }
 }
 
 async function loadConfig(){
@@ -702,18 +816,15 @@ async function saveConfig(){
     joursCulte: joursCulte
   };
   activeDays = churchDaysArray(config);
-  let ok = false;
-  try{
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify(Object.assign({ action:'updateChurchConfig', token: session.token }, config))
-    });
-    const json = await res.json();
-    if(json && json.error === 'unauthorized'){ await sessionExpired(); return; }
-    ok = !!(json && json.ok);
-  }catch(e){ console.error('saveConfig failed', e); }
-  document.getElementById('cfg-status').textContent = ok ? 'Enregistré ✓' : 'Échec de l\'enregistrement';
+  let ok = lsSet('config', config);
+  if(ok){
+    const p = getPending();
+    p['config'] = { type:'config', value:config, ts:Date.now() };
+    setPending(p);
+    await flushPending();
+  }
+  const synced = ok && !getPending()['config'];
+  document.getElementById('cfg-status').textContent = !ok ? "Échec de l'enregistrement" : (synced ? 'Enregistré ✓' : "Enregistré sur l'appareil ✓ — envoi dès que le réseau revient");
   refreshBrand();
   setTimeout(()=>document.getElementById('cfg-status').textContent='', 2500);
 }
@@ -839,7 +950,7 @@ async function saveMonth(){
 
   const key = ymKey(cursor);
   const ok = await storeSet('mois:'+key, currentMonthData);
-  const msg = ok ? 'Enregistré ✓' : "Échec de l'enregistrement";
+  const msg = !ok ? "Échec de l'enregistrement (espace de l'appareil plein ?)" : (lastSaveSynced ? 'Enregistré ✓' : "Enregistré sur l'appareil ✓ — envoi dès que le réseau revient");
   document.getElementById('saisie-status').textContent = msg;
   document.getElementById('saisie-status2').textContent = msg;
   setTimeout(()=>{document.getElementById('saisie-status').textContent='';document.getElementById('saisie-status2').textContent='';}, 2500);
@@ -1059,6 +1170,91 @@ document.getElementById('auth-password').addEventListener('keydown', e=>{
   if(e.key === 'Enter') submitAuth();
 });
 
+
+/* ===================== SAUVEGARDE (export / import) ===================== */
+function exportBackup(){
+  if(!session) return;
+  const prefix = LS_PREFIX + session.username + ':';
+  const data = {};
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k.startsWith(prefix) && !k.endsWith(':__pending')) data[k.slice(prefix.length)] = JSON.parse(localStorage.getItem(k));
+  }
+  const blob = new Blob([JSON.stringify({ app:'epej-registre', version:1, username:session.username, date:new Date().toISOString(), data }, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'EPEJ-sauvegarde-' + session.username + '-' + isoDate(new Date()) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  showBackupMsg('Sauvegarde téléchargée ✓ (' + Object.keys(data).length + ' éléments).', true);
+}
+function showBackupMsg(t, good){ const el=document.getElementById('backup-msg'); el.textContent=t; el.style.color = good?'var(--good)':'var(--danger)'; el.style.display='block'; }
+function importBackup(input){
+  const f = input.files && input.files[0]; input.value=''; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const j = JSON.parse(r.result);
+      if(!j || j.app !== 'epej-registre' || !j.data) throw new Error('format');
+      const keys = Object.keys(j.data);
+      if(!confirm('Restaurer ' + keys.length + ' éléments de la sauvegarde du ' + (j.date||'').slice(0,10) + ' ? Les mois/paramètres du même nom seront remplacés puis envoyés au Google Sheet.')) return;
+      const p = getPending();
+      keys.forEach(k=>{
+        if(k === '__pending') return;
+        lsSet(k, j.data[k]);
+        if(k === 'config') p['config'] = { type:'config', value:j.data[k], ts:Date.now() };
+        else if(k.startsWith('kv:')) p[k] = { type:'kv', key:k.slice(3), value:j.data[k], ts:Date.now() };
+      });
+      setPending(p);
+      flushPending().then(()=>{ showBackupMsg('Sauvegarde restaurée ✓', true); loadConfig(); loadSaisieMonth(); });
+    }catch(e){ showBackupMsg("Ce fichier n'est pas une sauvegarde EPEJ valide.", false); }
+  };
+  r.readAsText(f);
+}
+
+/* ===================== INSTALLATION (PWA) ===================== */
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault(); deferredInstall = e;
+  document.getElementById('installBtn').style.display = '';
+});
+async function installApp(){
+  if(!deferredInstall) return;
+  deferredInstall.prompt();
+  await deferredInstall.userChoice;
+  deferredInstall = null;
+  document.getElementById('installBtn').style.display = 'none';
+}
+window.addEventListener('appinstalled', ()=>{ document.getElementById('installBtn').style.display='none'; });
+function dismissIosHint(){ document.getElementById('iosHint').style.display='none'; try{ localStorage.setItem('epej_ios_hint','1'); }catch(e){} }
+(function iosHint(){
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  let seen = false; try{ seen = !!localStorage.getItem('epej_ios_hint'); }catch(e){}
+  if(ios && !standalone && !seen) document.getElementById('iosHint').style.display='block';
+})();
+
+/* Demande au navigateur de ne jamais effacer les données de l'appli (stockage persistant) */
+if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
+
+/* Service worker : ouverture de l'appli sans réseau */
+if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(e=>console.warn('SW', e)); });
+}
+
+/* Envoi automatique des données en attente */
+window.addEventListener('online', ()=>{ updateSyncBadge(); flushPending(); });
+window.addEventListener('offline', updateSyncBadge);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) flushPending(); });
+setInterval(()=>{ flushPending(); updateSyncBadge(); }, 45000);
+
+/* Précharge les 13 derniers mois pour qu'ils restent consultables hors ligne */
+async function prefetchMonths(){
+  if(!session || session.role === 'admin' || !navigator.onLine) return;
+  const d = new Date(); d.setDate(1);
+  for(let i=0;i<13;i++){ await storeGet('mois:'+ymKey(d)); d.setMonth(d.getMonth()-1); }
+}
+
 (async function init(){
   if(APPS_SCRIPT_URL.indexOf('PASTE_YOUR') === 0){
     document.querySelector('.wrap').insertAdjacentHTML('afterbegin',
@@ -1077,5 +1273,9 @@ document.getElementById('auth-password').addEventListener('keydown', e=>{
 })();
 
 </script>
+<div id="iosHint">
+  <b>Installer sur iPhone / iPad :</b> touchez le bouton <b>Partager</b> (carré avec flèche) puis <b>« Sur l'écran d'accueil »</b>.
+  <div style="text-align:right; margin-top:8px;"><button class="btn ghost small" onclick="dismissIosHint()">Compris</button></div>
+</div>
 </body>
 </html>
